@@ -70,6 +70,7 @@ function salvarTransacoes(transacoes) {
 
 // ---------- Projeção de despesas fixas para o calendário ----------
 
+// Pega, de cada despesa fixa (por descrição+categoria), o registro mais recente
 function obterDespesasFixasUnicas(transacoes) {
   const fixas = transacoes.filter((t) => t.tipo === 'despesa' && t.fixa)
   const mapa = {}
@@ -82,6 +83,7 @@ function obterDespesasFixasUnicas(transacoes) {
   return Object.values(mapa)
 }
 
+// Projeta as despesas fixas para um mês específico (ano, mes 1-indexado)
 function projetarParaMes(despesasFixasUnicas, ano, mes) {
   const ultimoDiaMes = new Date(ano, mes, 0).getDate()
   return despesasFixasUnicas.map((t) => {
@@ -97,6 +99,7 @@ function projetarParaMes(despesasFixasUnicas, ano, mes) {
   })
 }
 
+// Combina transações reais de um mês com as projeções (sem duplicar)
 function itensDoMesComProjecao(transacoes, ano, mes) {
   const chaveMes = `${ano}-${String(mes).padStart(2, '0')}`
   const reais = transacoes.filter((t) => t.data.startsWith(chaveMes))
@@ -144,6 +147,7 @@ function salvarCompras(compras) {
   localStorage.setItem('compras', JSON.stringify(compras))
 }
 
+// Calcula em qual fatura (mês) cada parcela de uma compra cai
 function calcularParcelas(compra, cartao) {
   const [ano, mes, dia] = compra.data.split('-').map(Number)
   let anoFatura = ano
@@ -177,10 +181,26 @@ function calcularParcelas(compra, cartao) {
   return parcelas
 }
 
+// Retorna todas as parcelas de todas as compras de um cartão específico
 function parcelasDoCartao(compras, cartao) {
   return compras
     .filter((c) => c.cartaoId === cartao.id)
     .flatMap((c) => calcularParcelas(c, cartao))
+}
+
+// ---------- Persistência: Metas ----------
+
+function carregarMetas() {
+  try {
+    const dados = localStorage.getItem('metas')
+    return dados ? JSON.parse(dados) : []
+  } catch {
+    return []
+  }
+}
+
+function salvarMetas(metas) {
+  localStorage.setItem('metas', JSON.stringify(metas))
 }
 
 // ---------- Componente: Dashboard ----------
@@ -204,6 +224,7 @@ function Dashboard({ transacoes, onEditar, onExcluir }) {
   const saldoMes = receitasMes - despesasMes
 
   // Saldo total: soma de tudo que já aconteceu até hoje, não só o mês atual.
+  // Isso evita que o salário recebido no fim do mês passado "suma" da conta.
   const saldoAcumulado = transacoes
     .filter((t) => t.data <= hojeStr)
     .reduce((soma, t) => soma + (t.tipo === 'receita' ? t.valor : -t.valor), 0)
@@ -366,14 +387,26 @@ function Dashboard({ transacoes, onEditar, onExcluir }) {
                 <button
                   onClick={() => onEditar(t)}
                   aria-label="Editar"
-                  style={{ background: 'transparent', border: 'none', fontSize: 15, padding: 6, cursor: 'pointer' }}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    fontSize: 15,
+                    padding: 6,
+                    cursor: 'pointer',
+                  }}
                 >
                   ✏️
                 </button>
                 <button
                   onClick={() => onExcluir(t.id)}
                   aria-label="Excluir"
-                  style={{ background: 'transparent', border: 'none', fontSize: 15, padding: 6, cursor: 'pointer' }}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    fontSize: 15,
+                    padding: 6,
+                    cursor: 'pointer',
+                  }}
                 >
                   🗑️
                 </button>
@@ -605,6 +638,7 @@ function Calendario({ transacoes }) {
     setDiaSelecionado(null)
   }
 
+  // Próximos vencimentos: junta mês atual + próximo, filtra a partir de hoje
   const itensProximoMes = itensDoMesComProjecao(
     transacoes,
     visualizado.mes === 12 ? visualizado.ano + 1 : visualizado.ano,
@@ -773,12 +807,14 @@ function Calendario({ transacoes }) {
 
 // ---------- Componente: Formulário Novo Cartão ----------
 
-function FormNovoCartao({ onSalvar, onCancelar }) {
-  const [nome, setNome] = useState('')
-  const [banco, setBanco] = useState('')
-  const [limite, setLimite] = useState('')
-  const [diaFechamento, setDiaFechamento] = useState('')
-  const [diaVencimento, setDiaVencimento] = useState('')
+function FormNovoCartao({ onSalvar, onCancelar, cartaoInicial }) {
+  const [nome, setNome] = useState(cartaoInicial?.nome || '')
+  const [banco, setBanco] = useState(cartaoInicial?.banco || '')
+  const [limite, setLimite] = useState(cartaoInicial ? String(cartaoInicial.limite) : '')
+  const [diaFechamento, setDiaFechamento] = useState(cartaoInicial ? String(cartaoInicial.diaFechamento) : '')
+  const [diaVencimento, setDiaVencimento] = useState(cartaoInicial ? String(cartaoInicial.diaVencimento) : '')
+
+  const emEdicao = Boolean(cartaoInicial)
 
   const inputStyle = {
     width: '100%',
@@ -804,7 +840,7 @@ function FormNovoCartao({ onSalvar, onCancelar }) {
       return
     }
     onSalvar({
-      id: Date.now(),
+      id: emEdicao ? cartaoInicial.id : Date.now(),
       nome: nome.trim(),
       banco: banco.trim(),
       limite: Number(limite),
@@ -816,7 +852,7 @@ function FormNovoCartao({ onSalvar, onCancelar }) {
   return (
     <div style={{ background: '#1E293B', borderRadius: 14, padding: 16, marginBottom: 16 }}>
       <p style={{ color: '#fff', fontSize: 15, fontWeight: 600, marginBottom: 12 }}>
-        Novo cartão
+        {emEdicao ? 'Editar cartão' : 'Novo cartão'}
       </p>
       <label style={{ color: '#94A3B8', fontSize: 13 }}>Nome do cartão</label>
       <input
@@ -876,7 +912,7 @@ function FormNovoCartao({ onSalvar, onCancelar }) {
           onClick={handleSalvar}
           style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
         >
-          Salvar
+          {emEdicao ? 'Salvar alterações' : 'Salvar'}
         </button>
       </div>
     </div>
@@ -885,12 +921,14 @@ function FormNovoCartao({ onSalvar, onCancelar }) {
 
 // ---------- Componente: Formulário Nova Compra no Cartão ----------
 
-function FormNovaCompra({ onSalvar, onCancelar }) {
-  const [descricao, setDescricao] = useState('')
-  const [categoria, setCategoria] = useState(CATEGORIAS_DESPESA[0].id)
-  const [valorTotal, setValorTotal] = useState('')
-  const [parcelas, setParcelas] = useState('1')
-  const [data, setData] = useState(new Date().toISOString().slice(0, 10))
+function FormNovaCompra({ onSalvar, onCancelar, compraInicial }) {
+  const [descricao, setDescricao] = useState(compraInicial?.descricao || '')
+  const [categoria, setCategoria] = useState(compraInicial?.categoria || CATEGORIAS_DESPESA[0].id)
+  const [valorTotal, setValorTotal] = useState(compraInicial ? String(compraInicial.valorTotal) : '')
+  const [parcelas, setParcelas] = useState(compraInicial ? String(compraInicial.parcelas) : '1')
+  const [data, setData] = useState(compraInicial?.data || new Date().toISOString().slice(0, 10))
+
+  const emEdicao = Boolean(compraInicial)
 
   const inputStyle = {
     width: '100%',
@@ -910,7 +948,7 @@ function FormNovaCompra({ onSalvar, onCancelar }) {
       return
     }
     onSalvar({
-      id: Date.now(),
+      id: emEdicao ? compraInicial.id : Date.now(),
       descricao: descricao.trim(),
       categoria,
       valorTotal: Number(valorTotal),
@@ -922,7 +960,7 @@ function FormNovaCompra({ onSalvar, onCancelar }) {
   return (
     <div style={{ background: '#1E293B', borderRadius: 14, padding: 16, marginBottom: 16 }}>
       <p style={{ color: '#fff', fontSize: 15, fontWeight: 600, marginBottom: 12 }}>
-        Nova compra
+        {emEdicao ? 'Editar compra' : 'Nova compra'}
       </p>
       <label style={{ color: '#94A3B8', fontSize: 13 }}>Descrição</label>
       <input
@@ -971,7 +1009,7 @@ function FormNovaCompra({ onSalvar, onCancelar }) {
           onClick={handleSalvar}
           style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
         >
-          Salvar
+          {emEdicao ? 'Salvar alterações' : 'Salvar'}
         </button>
       </div>
     </div>
@@ -980,10 +1018,10 @@ function FormNovaCompra({ onSalvar, onCancelar }) {
 
 // ---------- Componente: Cartões ----------
 
-function Cartoes({ cartoes, compras, onAdicionarCartao, onAdicionarCompra }) {
-  const [mostrarFormCartao, setMostrarFormCartao] = useState(false)
+function Cartoes({ cartoes, compras, onAdicionarCartao, onEditarCartao, onExcluirCartao, onAdicionarCompra, onEditarCompra, onExcluirCompra }) {
+  const [modoFormCartao, setModoFormCartao] = useState(null) // null | 'novo' | cartaoObjeto
   const [cartaoExpandido, setCartaoExpandido] = useState(null)
-  const [mostrarFormCompraPara, setMostrarFormCompraPara] = useState(null)
+  const [modoFormCompra, setModoFormCompra] = useState(null) // null | { cartaoId, compra? }
 
   const chaveMesAtual = mesAtual()
 
@@ -998,9 +1036,9 @@ function Cartoes({ cartoes, compras, onAdicionarCartao, onAdicionarCompra }) {
     <div style={{ padding: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <h1 style={{ fontSize: 20, color: '#fff' }}>Cartões</h1>
-        {!mostrarFormCartao && (
+        {!modoFormCartao && (
           <button
-            onClick={() => setMostrarFormCartao(true)}
+            onClick={() => setModoFormCartao('novo')}
             style={{ background: '#6366F1', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600 }}
           >
             + Cartão
@@ -1008,23 +1046,35 @@ function Cartoes({ cartoes, compras, onAdicionarCartao, onAdicionarCompra }) {
         )}
       </div>
 
-      {mostrarFormCartao && (
+      {modoFormCartao === 'novo' && (
         <FormNovoCartao
           onSalvar={(cartao) => {
             onAdicionarCartao(cartao)
-            setMostrarFormCartao(false)
+            setModoFormCartao(null)
           }}
-          onCancelar={() => setMostrarFormCartao(false)}
+          onCancelar={() => setModoFormCartao(null)}
         />
       )}
 
-      {cartoes.length === 0 && !mostrarFormCartao && (
+      {modoFormCartao && modoFormCartao !== 'novo' && (
+        <FormNovoCartao
+          cartaoInicial={modoFormCartao}
+          onSalvar={(cartao) => {
+            onEditarCartao(cartao)
+            setModoFormCartao(null)
+          }}
+          onCancelar={() => setModoFormCartao(null)}
+        />
+      )}
+
+      {cartoes.length === 0 && !modoFormCartao && (
         <p style={{ color: '#64748B', fontSize: 14 }}>
           Nenhum cartão cadastrado ainda. Toque em "+ Cartão" pra começar.
         </p>
       )}
 
       {cartoes.map((cartao) => {
+        const comprasDoCartao = compras.filter((c) => c.cartaoId === cartao.id)
         const todasParcelas = parcelasDoCartao(compras, cartao)
         const faturaAtual = todasParcelas
           .filter((p) => p.chaveMes === chaveMesAtual)
@@ -1037,39 +1087,57 @@ function Cartoes({ cartoes, compras, onAdicionarCartao, onAdicionarCompra }) {
           .reduce((soma, p) => soma + p.valor, 0)
         const disponivel = cartao.limite - emAberto
         const expandido = cartaoExpandido === cartao.id
-
-        const parcelasFuturas = todasParcelas
-          .filter((p) => p.chaveMes >= chaveMesAtual)
-          .sort((a, b) => a.chaveMes.localeCompare(b.chaveMes))
+        const formCompraAberto = modoFormCompra && modoFormCompra.cartaoId === cartao.id
 
         return (
           <div key={cartao.id} style={{ marginBottom: 16 }}>
-            <button
-              onClick={() => setCartaoExpandido(expandido ? null : cartao.id)}
+            <div
               style={{
-                width: '100%',
-                textAlign: 'left',
                 background: 'linear-gradient(135deg, #4F46E5, #6366F1)',
                 borderRadius: 16,
                 padding: 18,
-                border: 'none',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                <p style={{ color: '#fff', fontSize: 15, fontWeight: 700 }}>{cartao.nome}</p>
-                <p style={{ color: '#E0E7FF', fontSize: 12 }}>vence dia {cartao.diaVencimento}</p>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <div>
-                  <p style={{ color: '#E0E7FF', fontSize: 11 }}>Fatura atual</p>
-                  <p style={{ color: '#fff', fontSize: 18, fontWeight: 700 }}>{formatarMoeda(faturaAtual)}</p>
+              <button
+                onClick={() => setCartaoExpandido(expandido ? null : cartao.id)}
+                style={{ width: '100%', textAlign: 'left', background: 'transparent', border: 'none', padding: 0 }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <p style={{ color: '#fff', fontSize: 15, fontWeight: 700 }}>{cartao.nome}</p>
+                  <p style={{ color: '#E0E7FF', fontSize: 12 }}>vence dia {cartao.diaVencimento}</p>
                 </div>
-                <div>
-                  <p style={{ color: '#E0E7FF', fontSize: 11 }}>Disponível</p>
-                  <p style={{ color: '#fff', fontSize: 18, fontWeight: 700 }}>{formatarMoeda(disponivel)}</p>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <div>
+                    <p style={{ color: '#E0E7FF', fontSize: 11 }}>Fatura atual</p>
+                    <p style={{ color: '#fff', fontSize: 18, fontWeight: 700 }}>{formatarMoeda(faturaAtual)}</p>
+                  </div>
+                  <div>
+                    <p style={{ color: '#E0E7FF', fontSize: 11 }}>Disponível</p>
+                    <p style={{ color: '#fff', fontSize: 18, fontWeight: 700 }}>{formatarMoeda(disponivel)}</p>
+                  </div>
                 </div>
+              </button>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4, marginTop: 8 }}>
+                <button
+                  onClick={() => setModoFormCartao(cartao)}
+                  aria-label="Editar cartão"
+                  style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: 6, padding: '4px 8px', fontSize: 13 }}
+                >
+                  ✏️ Editar
+                </button>
+                <button
+                  onClick={() => {
+                    if (window.confirm(`Excluir o cartão "${cartao.nome}" e todas as suas compras?`)) {
+                      onExcluirCartao(cartao.id)
+                    }
+                  }}
+                  aria-label="Excluir cartão"
+                  style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: 6, padding: '4px 8px', fontSize: 13 }}
+                >
+                  🗑️
+                </button>
               </div>
-            </button>
+            </div>
 
             {expandido && (
               <div style={{ background: '#1E293B', borderRadius: 14, padding: 16, marginTop: 8 }}>
@@ -1080,17 +1148,22 @@ function Cartoes({ cartoes, compras, onAdicionarCartao, onAdicionarCompra }) {
                   <p style={{ color: '#94A3B8', fontSize: 13 }}>Fecha dia {cartao.diaFechamento}</p>
                 </div>
 
-                {mostrarFormCompraPara === cartao.id ? (
+                {formCompraAberto ? (
                   <FormNovaCompra
+                    compraInicial={modoFormCompra.compra}
                     onSalvar={(compra) => {
-                      onAdicionarCompra({ ...compra, cartaoId: cartao.id })
-                      setMostrarFormCompraPara(null)
+                      if (modoFormCompra.compra) {
+                        onEditarCompra({ ...compra, cartaoId: cartao.id })
+                      } else {
+                        onAdicionarCompra({ ...compra, cartaoId: cartao.id })
+                      }
+                      setModoFormCompra(null)
                     }}
-                    onCancelar={() => setMostrarFormCompraPara(null)}
+                    onCancelar={() => setModoFormCompra(null)}
                   />
                 ) : (
                   <button
-                    onClick={() => setMostrarFormCompraPara(cartao.id)}
+                    onClick={() => setModoFormCompra({ cartaoId: cartao.id })}
                     style={{
                       width: '100%',
                       padding: 12,
@@ -1106,15 +1179,15 @@ function Cartoes({ cartoes, compras, onAdicionarCartao, onAdicionarCompra }) {
                   </button>
                 )}
 
-                <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 8 }}>Parcelas em aberto</p>
-                {parcelasFuturas.length === 0 && (
-                  <p style={{ color: '#64748B', fontSize: 13 }}>Nenhuma compra em aberto.</p>
+                <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 8 }}>Compras cadastradas</p>
+                {comprasDoCartao.length === 0 && (
+                  <p style={{ color: '#64748B', fontSize: 13, marginBottom: 8 }}>Nenhuma compra cadastrada.</p>
                 )}
-                {parcelasFuturas.map((p, i) => {
-                  const cat = infoCategoria('despesa', p.categoria)
+                {comprasDoCartao.map((c) => {
+                  const cat = infoCategoria('despesa', c.categoria)
                   return (
                     <div
-                      key={`${p.compraId}-${p.numero}-${i}`}
+                      key={c.id}
                       style={{
                         display: 'flex',
                         justifyContent: 'space-between',
@@ -1126,19 +1199,318 @@ function Cartoes({ cartoes, compras, onAdicionarCartao, onAdicionarCompra }) {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ fontSize: 15 }}>{cat.icone}</span>
                         <div>
-                          <p style={{ color: '#fff', fontSize: 13 }}>{p.descricao}</p>
+                          <p style={{ color: '#fff', fontSize: 13 }}>{c.descricao}</p>
                           <p style={{ color: '#64748B', fontSize: 11 }}>
-                            {p.chaveMes} · parcela {p.numero}/{p.total}
+                            {formatarMoeda(c.valorTotal)} em {c.parcelas}x
                           </p>
                         </div>
                       </div>
-                      <p style={{ color: '#F59E0B', fontSize: 13, fontWeight: 600 }}>
-                        {formatarMoeda(p.valor)}
-                      </p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <button
+                          onClick={() => setModoFormCompra({ cartaoId: cartao.id, compra: c })}
+                          aria-label="Editar compra"
+                          style={{ background: 'transparent', border: 'none', fontSize: 14, padding: 6, cursor: 'pointer' }}
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm('Excluir esta compra e todas as suas parcelas?')) {
+                              onExcluirCompra(c.id)
+                            }
+                          }}
+                          aria-label="Excluir compra"
+                          style={{ background: 'transparent', border: 'none', fontSize: 14, padding: 6, cursor: 'pointer' }}
+                        >
+                          🗑️
+                        </button>
+                      </div>
                     </div>
                   )
                 })}
               </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ---------- Componente: Formulário Nova Meta ----------
+
+function FormNovaMeta({ onSalvar, onCancelar, metaInicial }) {
+  const [nome, setNome] = useState(metaInicial?.nome || '')
+  const [valorAlvo, setValorAlvo] = useState(metaInicial ? String(metaInicial.valorAlvo) : '')
+  const [valorAtual, setValorAtual] = useState(metaInicial ? String(metaInicial.valorAtual) : '0')
+  const [icone, setIcone] = useState(metaInicial?.icone || '🎯')
+
+  const emEdicao = Boolean(metaInicial)
+  const iconesDisponiveis = ['🎯', '✈️', '🚗', '🏠', '🎓', '💍', '🎂', '🚨', '🛡️']
+
+  const inputStyle = {
+    width: '100%',
+    padding: '12px 14px',
+    borderRadius: 10,
+    border: '1px solid #334155',
+    background: '#0F172A',
+    color: '#fff',
+    fontSize: 15,
+    marginBottom: 14,
+    boxSizing: 'border-box',
+  }
+
+  function handleSalvar() {
+    if (!nome.trim() || !valorAlvo || Number(valorAlvo) <= 0) {
+      alert('Preencha o nome da meta e um valor alvo válido.')
+      return
+    }
+    onSalvar({
+      id: emEdicao ? metaInicial.id : Date.now(),
+      nome: nome.trim(),
+      valorAlvo: Number(valorAlvo),
+      valorAtual: Number(valorAtual) || 0,
+      icone,
+    })
+  }
+
+  return (
+    <div style={{ background: '#1E293B', borderRadius: 14, padding: 16, marginBottom: 16 }}>
+      <p style={{ color: '#fff', fontSize: 15, fontWeight: 600, marginBottom: 12 }}>
+        {emEdicao ? 'Editar meta' : 'Nova meta'}
+      </p>
+
+      <label style={{ color: '#94A3B8', fontSize: 13 }}>Ícone</label>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+        {iconesDisponiveis.map((ic) => (
+          <button
+            key={ic}
+            onClick={() => setIcone(ic)}
+            style={{
+              fontSize: 18,
+              padding: 8,
+              borderRadius: 8,
+              border: icone === ic ? '2px solid #6366F1' : '2px solid transparent',
+              background: '#0F172A',
+            }}
+          >
+            {ic}
+          </button>
+        ))}
+      </div>
+
+      <label style={{ color: '#94A3B8', fontSize: 13 }}>Nome da meta</label>
+      <input
+        style={inputStyle}
+        placeholder="Ex: Viagem, Carro, Reserva..."
+        value={nome}
+        onChange={(e) => setNome(e.target.value)}
+      />
+
+      <label style={{ color: '#94A3B8', fontSize: 13 }}>Valor alvo (R$)</label>
+      <input
+        style={inputStyle}
+        type="number"
+        inputMode="decimal"
+        placeholder="0,00"
+        value={valorAlvo}
+        onChange={(e) => setValorAlvo(e.target.value)}
+      />
+
+      <label style={{ color: '#94A3B8', fontSize: 13 }}>Já guardado até agora (R$)</label>
+      <input
+        style={inputStyle}
+        type="number"
+        inputMode="decimal"
+        placeholder="0,00"
+        value={valorAtual}
+        onChange={(e) => setValorAtual(e.target.value)}
+      />
+
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button
+          onClick={onCancelar}
+          style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#334155', color: '#fff', fontWeight: 600 }}
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={handleSalvar}
+          style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
+        >
+          {emEdicao ? 'Salvar alterações' : 'Salvar'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ---------- Componente: Metas ----------
+
+function Metas({ metas, onAdicionarMeta, onEditarMeta, onExcluirMeta, onContribuir }) {
+  const [modoForm, setModoForm] = useState(null) // null | 'novo' | metaObjeto
+  const [depositoAberto, setDepositoAberto] = useState(null) // id da meta com input de depósito aberto
+  const [valorDeposito, setValorDeposito] = useState('')
+
+  function confirmarDeposito(meta) {
+    const valor = Number(valorDeposito)
+    if (!valor || valor <= 0) {
+      alert('Digite um valor válido pra depositar.')
+      return
+    }
+    onContribuir(meta.id, valor)
+    setDepositoAberto(null)
+    setValorDeposito('')
+  }
+
+  return (
+    <div style={{ padding: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <h1 style={{ fontSize: 20, color: '#fff' }}>Metas</h1>
+        {!modoForm && (
+          <button
+            onClick={() => setModoForm('novo')}
+            style={{ background: '#6366F1', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600 }}
+          >
+            + Meta
+          </button>
+        )}
+      </div>
+
+      {modoForm === 'novo' && (
+        <FormNovaMeta
+          onSalvar={(meta) => {
+            onAdicionarMeta(meta)
+            setModoForm(null)
+          }}
+          onCancelar={() => setModoForm(null)}
+        />
+      )}
+
+      {modoForm && modoForm !== 'novo' && (
+        <FormNovaMeta
+          metaInicial={modoForm}
+          onSalvar={(meta) => {
+            onEditarMeta(meta)
+            setModoForm(null)
+          }}
+          onCancelar={() => setModoForm(null)}
+        />
+      )}
+
+      {metas.length === 0 && !modoForm && (
+        <p style={{ color: '#64748B', fontSize: 14 }}>
+          Nenhuma meta cadastrada ainda. Toque em "+ Meta" pra começar a guardar dinheiro pra algo importante.
+        </p>
+      )}
+
+      {metas.map((meta) => {
+        const percentual = meta.valorAlvo > 0 ? Math.min((meta.valorAtual / meta.valorAlvo) * 100, 100) : 0
+        const completa = meta.valorAtual >= meta.valorAlvo
+        const faltam = Math.max(meta.valorAlvo - meta.valorAtual, 0)
+
+        return (
+          <div key={meta.id} style={{ background: '#1E293B', borderRadius: 14, padding: 16, marginBottom: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <p style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>
+                {meta.icone} {meta.nome} {completa && '✅'}
+              </p>
+              <div style={{ display: 'flex', gap: 2 }}>
+                <button
+                  onClick={() => setModoForm(meta)}
+                  aria-label="Editar meta"
+                  style={{ background: 'transparent', border: 'none', fontSize: 14, padding: 6, cursor: 'pointer' }}
+                >
+                  ✏️
+                </button>
+                <button
+                  onClick={() => {
+                    if (window.confirm(`Excluir a meta "${meta.nome}"?`)) onExcluirMeta(meta.id)
+                  }}
+                  aria-label="Excluir meta"
+                  style={{ background: 'transparent', border: 'none', fontSize: 14, padding: 6, cursor: 'pointer' }}
+                >
+                  🗑️
+                </button>
+              </div>
+            </div>
+
+            <div style={{ background: '#0F172A', borderRadius: 8, height: 10, marginBottom: 8 }}>
+              <div
+                style={{
+                  width: `${percentual}%`,
+                  background: completa ? '#22C55E' : '#6366F1',
+                  height: 10,
+                  borderRadius: 8,
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+              <p style={{ color: '#94A3B8', fontSize: 12 }}>
+                {formatarMoeda(meta.valorAtual)} de {formatarMoeda(meta.valorAlvo)}
+              </p>
+              <p style={{ color: '#94A3B8', fontSize: 12 }}>{Math.round(percentual)}%</p>
+            </div>
+
+            {!completa && faltam > 0 && (
+              <p style={{ color: '#64748B', fontSize: 12, marginBottom: 10 }}>
+                Faltam {formatarMoeda(faltam)}
+              </p>
+            )}
+
+            {depositoAberto === meta.id ? (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  autoFocus
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="Valor a depositar"
+                  value={valorDeposito}
+                  onChange={(e) => setValorDeposito(e.target.value)}
+                  style={{
+                    flex: 1,
+                    padding: '10px 12px',
+                    borderRadius: 10,
+                    border: '1px solid #334155',
+                    background: '#0F172A',
+                    color: '#fff',
+                    fontSize: 14,
+                  }}
+                />
+                <button
+                  onClick={() => confirmarDeposito(meta)}
+                  style={{ background: '#22C55E', border: 'none', color: '#fff', borderRadius: 10, padding: '0 16px', fontWeight: 600 }}
+                >
+                  OK
+                </button>
+                <button
+                  onClick={() => {
+                    setDepositoAberto(null)
+                    setValorDeposito('')
+                  }}
+                  style={{ background: '#334155', border: 'none', color: '#fff', borderRadius: 10, padding: '0 12px' }}
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              !completa && (
+                <button
+                  onClick={() => setDepositoAberto(meta.id)}
+                  style={{
+                    width: '100%',
+                    padding: 10,
+                    borderRadius: 10,
+                    border: '1px dashed #22C55E',
+                    background: 'transparent',
+                    color: '#22C55E',
+                    fontWeight: 600,
+                  }}
+                >
+                  💰 Depositar
+                </button>
+              )
             )}
           </div>
         )
@@ -1154,6 +1526,7 @@ function BottomNav({ abaAtiva, onMudarAba }) {
     { id: 'dashboard', label: 'Início', icone: '🏠' },
     { id: 'calendario', label: 'Calendário', icone: '📅' },
     { id: 'cartoes', label: 'Cartões', icone: '💳' },
+    { id: 'metas', label: 'Metas', icone: '🎯' },
     { id: 'adicionar', label: 'Adicionar', icone: '➕' },
   ]
 
@@ -1196,6 +1569,7 @@ export default function App() {
   const [transacoes, setTransacoes] = useState(carregarTransacoes)
   const [cartoes, setCartoes] = useState(carregarCartoes)
   const [compras, setCompras] = useState(carregarCompras)
+  const [metas, setMetas] = useState(carregarMetas)
   const [abaAtiva, setAbaAtiva] = useState('dashboard')
   const [transacaoEditando, setTransacaoEditando] = useState(null)
 
@@ -1210,6 +1584,10 @@ export default function App() {
   useEffect(() => {
     salvarCompras(compras)
   }, [compras])
+
+  useEffect(() => {
+    salvarMetas(metas)
+  }, [metas])
 
   function handleMudarAba(novaAba) {
     setTransacaoEditando(null)
@@ -1244,8 +1622,43 @@ export default function App() {
     setCartoes((atual) => [...atual, novoCartao])
   }
 
+  function handleEditarCartao(cartaoAtualizado) {
+    setCartoes((atual) => atual.map((c) => (c.id === cartaoAtualizado.id ? cartaoAtualizado : c)))
+  }
+
+  function handleExcluirCartao(id) {
+    setCartoes((atual) => atual.filter((c) => c.id !== id))
+    setCompras((atual) => atual.filter((c) => c.cartaoId !== id))
+  }
+
   function handleAdicionarCompra(novaCompra) {
     setCompras((atual) => [...atual, novaCompra])
+  }
+
+  function handleEditarCompra(compraAtualizada) {
+    setCompras((atual) => atual.map((c) => (c.id === compraAtualizada.id ? compraAtualizada : c)))
+  }
+
+  function handleExcluirCompra(id) {
+    setCompras((atual) => atual.filter((c) => c.id !== id))
+  }
+
+  function handleAdicionarMeta(novaMeta) {
+    setMetas((atual) => [...atual, novaMeta])
+  }
+
+  function handleEditarMeta(metaAtualizada) {
+    setMetas((atual) => atual.map((m) => (m.id === metaAtualizada.id ? metaAtualizada : m)))
+  }
+
+  function handleExcluirMeta(id) {
+    setMetas((atual) => atual.filter((m) => m.id !== id))
+  }
+
+  function handleContribuirMeta(id, valor) {
+    setMetas((atual) =>
+      atual.map((m) => (m.id === id ? { ...m, valorAtual: m.valorAtual + valor } : m))
+    )
   }
 
   return (
@@ -1266,7 +1679,20 @@ export default function App() {
           cartoes={cartoes}
           compras={compras}
           onAdicionarCartao={handleAdicionarCartao}
+          onEditarCartao={handleEditarCartao}
+          onExcluirCartao={handleExcluirCartao}
           onAdicionarCompra={handleAdicionarCompra}
+          onEditarCompra={handleEditarCompra}
+          onExcluirCompra={handleExcluirCompra}
+        />
+      )}
+      {abaAtiva === 'metas' && (
+        <Metas
+          metas={metas}
+          onAdicionarMeta={handleAdicionarMeta}
+          onEditarMeta={handleEditarMeta}
+          onExcluirMeta={handleExcluirMeta}
+          onContribuir={handleContribuirMeta}
         />
       )}
       {abaAtiva === 'adicionar' && (
