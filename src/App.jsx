@@ -144,7 +144,6 @@ function salvarCompras(compras) {
   localStorage.setItem('compras', JSON.stringify(compras))
 }
 
-// Calcula em qual fatura (mês) cada parcela de uma compra cai
 function calcularParcelas(compra, cartao) {
   const [ano, mes, dia] = compra.data.split('-').map(Number)
   let anoFatura = ano
@@ -178,7 +177,6 @@ function calcularParcelas(compra, cartao) {
   return parcelas
 }
 
-// Retorna todas as parcelas de todas as compras de um cartão específico
 function parcelasDoCartao(compras, cartao) {
   return compras
     .filter((c) => c.cartaoId === cartao.id)
@@ -187,14 +185,15 @@ function parcelasDoCartao(compras, cartao) {
 
 // ---------- Componente: Dashboard ----------
 
-function Dashboard({ transacoes }) {
+function Dashboard({ transacoes, onEditar, onExcluir }) {
+  const hojeStr = new Date().toISOString().slice(0, 10)
   const doMes = transacoes.filter((t) => t.data.startsWith(mesAtual()))
 
-  const receitas = doMes
+  const receitasMes = doMes
     .filter((t) => t.tipo === 'receita')
     .reduce((soma, t) => soma + t.valor, 0)
 
-  const despesas = doMes
+  const despesasMes = doMes
     .filter((t) => t.tipo === 'despesa')
     .reduce((soma, t) => soma + t.valor, 0)
 
@@ -202,7 +201,12 @@ function Dashboard({ transacoes }) {
     .filter((t) => t.tipo === 'despesa' && t.fixa)
     .reduce((soma, t) => soma + t.valor, 0)
 
-  const saldo = receitas - despesas
+  const saldoMes = receitasMes - despesasMes
+
+  // Saldo total: soma de tudo que já aconteceu até hoje, não só o mês atual.
+  const saldoAcumulado = transacoes
+    .filter((t) => t.data <= hojeStr)
+    .reduce((soma, t) => soma + (t.tipo === 'receita' ? t.valor : -t.valor), 0)
 
   const porCategoria = {}
   doMes
@@ -225,24 +229,28 @@ function Dashboard({ transacoes }) {
         }}
       >
         <p style={{ color: '#E0E7FF', fontSize: 13, marginBottom: 4 }}>
-          Saldo disponível este mês
+          Saldo total
         </p>
-        <p style={{ color: '#fff', fontSize: 32, fontWeight: 700 }}>
-          {formatarMoeda(saldo)}
+        <p style={{ color: '#fff', fontSize: 32, fontWeight: 700, marginBottom: 8 }}>
+          {formatarMoeda(saldoAcumulado)}
+        </p>
+        <p style={{ color: '#E0E7FF', fontSize: 12 }}>
+          Este mês: {saldoMes >= 0 ? '+' : ''}
+          {formatarMoeda(saldoMes)}
         </p>
       </div>
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
         <div style={{ flex: 1, background: '#1E293B', borderRadius: 14, padding: 16 }}>
-          <p style={{ color: '#94A3B8', fontSize: 12, marginBottom: 4 }}>Receitas</p>
+          <p style={{ color: '#94A3B8', fontSize: 12, marginBottom: 4 }}>Receitas do mês</p>
           <p style={{ color: '#22C55E', fontSize: 18, fontWeight: 600 }}>
-            {formatarMoeda(receitas)}
+            {formatarMoeda(receitasMes)}
           </p>
         </div>
         <div style={{ flex: 1, background: '#1E293B', borderRadius: 14, padding: 16 }}>
-          <p style={{ color: '#94A3B8', fontSize: 12, marginBottom: 4 }}>Despesas</p>
+          <p style={{ color: '#94A3B8', fontSize: 12, marginBottom: 4 }}>Despesas do mês</p>
           <p style={{ color: '#EF4444', fontSize: 18, fontWeight: 600 }}>
-            {formatarMoeda(despesas)}
+            {formatarMoeda(despesasMes)}
           </p>
         </div>
       </div>
@@ -266,7 +274,7 @@ function Dashboard({ transacoes }) {
             </p>
           </div>
           <p style={{ color: '#64748B', fontSize: 12 }}>
-            {Math.round((despesasFixas / (despesas || 1)) * 100)}% dos gastos
+            {Math.round((despesasFixas / (despesasMes || 1)) * 100)}% dos gastos
           </p>
         </div>
       )}
@@ -279,7 +287,7 @@ function Dashboard({ transacoes }) {
           <div style={{ marginBottom: 16 }}>
             {categoriasOrdenadas.map(([catId, valor]) => {
               const cat = infoCategoria('despesa', catId)
-              const percentual = despesas > 0 ? (valor / despesas) * 100 : 0
+              const percentual = despesasMes > 0 ? (valor / despesasMes) * 100 : 0
               return (
                 <div key={catId} style={{ marginBottom: 10 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -344,15 +352,32 @@ function Dashboard({ transacoes }) {
                   </p>
                 </div>
               </div>
-              <p
-                style={{
-                  color: t.tipo === 'receita' ? '#22C55E' : '#EF4444',
-                  fontSize: 14,
-                  fontWeight: 600,
-                }}
-              >
-                {t.tipo === 'receita' ? '+' : '-'} {formatarMoeda(t.valor)}
-              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <p
+                  style={{
+                    color: t.tipo === 'receita' ? '#22C55E' : '#EF4444',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    marginRight: 4,
+                  }}
+                >
+                  {t.tipo === 'receita' ? '+' : '-'} {formatarMoeda(t.valor)}
+                </p>
+                <button
+                  onClick={() => onEditar(t)}
+                  aria-label="Editar"
+                  style={{ background: 'transparent', border: 'none', fontSize: 15, padding: 6, cursor: 'pointer' }}
+                >
+                  ✏️
+                </button>
+                <button
+                  onClick={() => onExcluir(t.id)}
+                  aria-label="Excluir"
+                  style={{ background: 'transparent', border: 'none', fontSize: 15, padding: 6, cursor: 'pointer' }}
+                >
+                  🗑️
+                </button>
+              </div>
             </div>
           )
         })}
@@ -362,13 +387,15 @@ function Dashboard({ transacoes }) {
 
 // ---------- Componente: Adicionar ----------
 
-function Adicionar({ onAdicionar }) {
-  const [tipo, setTipo] = useState('despesa')
-  const [categoria, setCategoria] = useState(CATEGORIAS_DESPESA[0].id)
-  const [descricao, setDescricao] = useState('')
-  const [valor, setValor] = useState('')
-  const [data, setData] = useState(new Date().toISOString().slice(0, 10))
-  const [fixa, setFixa] = useState(false)
+function Adicionar({ onAdicionar, onEditar, onCancelarEdicao, transacaoInicial }) {
+  const [tipo, setTipo] = useState(transacaoInicial?.tipo || 'despesa')
+  const [categoria, setCategoria] = useState(transacaoInicial?.categoria || CATEGORIAS_DESPESA[0].id)
+  const [descricao, setDescricao] = useState(transacaoInicial?.descricao || '')
+  const [valor, setValor] = useState(transacaoInicial ? String(transacaoInicial.valor) : '')
+  const [data, setData] = useState(transacaoInicial?.data || new Date().toISOString().slice(0, 10))
+  const [fixa, setFixa] = useState(transacaoInicial?.fixa || false)
+
+  const emEdicao = Boolean(transacaoInicial)
 
   function handleMudarTipo(novoTipo) {
     setTipo(novoTipo)
@@ -381,18 +408,23 @@ function Adicionar({ onAdicionar }) {
       alert('Preencha a descrição e um valor válido.')
       return
     }
-    onAdicionar({
-      id: Date.now(),
+    const dadosTransacao = {
+      id: emEdicao ? transacaoInicial.id : Date.now(),
       tipo,
       categoria,
       descricao: descricao.trim(),
       valor: Number(valor),
       data,
       fixa: tipo === 'despesa' ? fixa : false,
-    })
-    setDescricao('')
-    setValor('')
-    setFixa(false)
+    }
+    if (emEdicao) {
+      onEditar(dadosTransacao)
+    } else {
+      onAdicionar(dadosTransacao)
+      setDescricao('')
+      setValor('')
+      setFixa(false)
+    }
   }
 
   const inputStyle = {
@@ -409,7 +441,9 @@ function Adicionar({ onAdicionar }) {
 
   return (
     <div style={{ padding: 20 }}>
-      <h1 style={{ fontSize: 20, marginBottom: 20, color: '#fff' }}>Nova transação</h1>
+      <h1 style={{ fontSize: 20, marginBottom: 20, color: '#fff' }}>
+        {emEdicao ? 'Editar transação' : 'Nova transação'}
+      </h1>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         <button
@@ -510,8 +544,26 @@ function Adicionar({ onAdicionar }) {
           marginTop: 8,
         }}
       >
-        Salvar
+        {emEdicao ? 'Salvar alterações' : 'Salvar'}
       </button>
+
+      {emEdicao && (
+        <button
+          onClick={onCancelarEdicao}
+          style={{
+            width: '100%',
+            padding: 12,
+            borderRadius: 10,
+            border: 'none',
+            background: 'transparent',
+            color: '#94A3B8',
+            fontSize: 14,
+            marginTop: 8,
+          }}
+        >
+          Cancelar edição
+        </button>
+      )}
     </div>
   )
 }
@@ -1145,6 +1197,7 @@ export default function App() {
   const [cartoes, setCartoes] = useState(carregarCartoes)
   const [compras, setCompras] = useState(carregarCompras)
   const [abaAtiva, setAbaAtiva] = useState('dashboard')
+  const [transacaoEditando, setTransacaoEditando] = useState(null)
 
   useEffect(() => {
     salvarTransacoes(transacoes)
@@ -1158,9 +1211,33 @@ export default function App() {
     salvarCompras(compras)
   }, [compras])
 
+  function handleMudarAba(novaAba) {
+    setTransacaoEditando(null)
+    setAbaAtiva(novaAba)
+  }
+
   function handleAdicionar(novaTransacao) {
     setTransacoes((atual) => [...atual, novaTransacao])
     setAbaAtiva('dashboard')
+  }
+
+  function handleIniciarEdicao(transacao) {
+    setTransacaoEditando(transacao)
+    setAbaAtiva('adicionar')
+  }
+
+  function handleSalvarEdicao(transacaoAtualizada) {
+    setTransacoes((atual) =>
+      atual.map((t) => (t.id === transacaoAtualizada.id ? transacaoAtualizada : t))
+    )
+    setTransacaoEditando(null)
+    setAbaAtiva('dashboard')
+  }
+
+  function handleExcluir(id) {
+    if (window.confirm('Tem certeza que deseja excluir esta transação?')) {
+      setTransacoes((atual) => atual.filter((t) => t.id !== id))
+    }
   }
 
   function handleAdicionarCartao(novoCartao) {
@@ -1180,7 +1257,9 @@ export default function App() {
         paddingBottom: 70,
       }}
     >
-      {abaAtiva === 'dashboard' && <Dashboard transacoes={transacoes} />}
+      {abaAtiva === 'dashboard' && (
+        <Dashboard transacoes={transacoes} onEditar={handleIniciarEdicao} onExcluir={handleExcluir} />
+      )}
       {abaAtiva === 'calendario' && <Calendario transacoes={transacoes} />}
       {abaAtiva === 'cartoes' && (
         <Cartoes
@@ -1190,9 +1269,19 @@ export default function App() {
           onAdicionarCompra={handleAdicionarCompra}
         />
       )}
-      {abaAtiva === 'adicionar' && <Adicionar onAdicionar={handleAdicionar} />}
+      {abaAtiva === 'adicionar' && (
+        <Adicionar
+          onAdicionar={handleAdicionar}
+          onEditar={handleSalvarEdicao}
+          onCancelarEdicao={() => {
+            setTransacaoEditando(null)
+            setAbaAtiva('dashboard')
+          }}
+          transacaoInicial={transacaoEditando}
+        />
+      )}
 
-      <BottomNav abaAtiva={abaAtiva} onMudarAba={setAbaAtiva} />
+      <BottomNav abaAtiva={abaAtiva} onMudarAba={handleMudarAba} />
     </div>
   )
 }
