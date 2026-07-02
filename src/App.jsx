@@ -42,6 +42,11 @@ function mesAtual() {
   return `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}`
 }
 
+function formatarDataCurta(dataStr) {
+  const [ano, mes, dia] = dataStr.split('-')
+  return `${dia}/${mes}`
+}
+
 // ---------- Persistência (localStorage) ----------
 
 function carregarTransacoes() {
@@ -49,7 +54,6 @@ function carregarTransacoes() {
     const dados = localStorage.getItem('transacoes')
     if (!dados) return []
     const lista = JSON.parse(dados)
-    // Migração: transações antigas (Fase 1) não tinham categoria/fixa
     return lista.map((t) => ({
       categoria: 'outros',
       fixa: false,
@@ -62,6 +66,54 @@ function carregarTransacoes() {
 
 function salvarTransacoes(transacoes) {
   localStorage.setItem('transacoes', JSON.stringify(transacoes))
+}
+
+// ---------- Projeção de despesas fixas para o calendário ----------
+
+function obterDespesasFixasUnicas(transacoes) {
+  const fixas = transacoes.filter((t) => t.tipo === 'despesa' && t.fixa)
+  const mapa = {}
+  fixas.forEach((t) => {
+    const chave = `${t.descricao.trim().toLowerCase()}|${t.categoria}`
+    if (!mapa[chave] || new Date(t.data) > new Date(mapa[chave].data)) {
+      mapa[chave] = t
+    }
+  })
+  return Object.values(mapa)
+}
+
+function projetarParaMes(despesasFixasUnicas, ano, mes) {
+  const ultimoDiaMes = new Date(ano, mes, 0).getDate()
+  return despesasFixasUnicas.map((t) => {
+    const diaOriginal = Number(t.data.split('-')[2])
+    const diaAjustado = Math.min(diaOriginal, ultimoDiaMes)
+    const dataProjetada = `${ano}-${String(mes).padStart(2, '0')}-${String(diaAjustado).padStart(2, '0')}`
+    return {
+      ...t,
+      data: dataProjetada,
+      projetada: true,
+      id: `proj-${t.categoria}-${t.descricao}-${dataProjetada}`,
+    }
+  })
+}
+
+function itensDoMesComProjecao(transacoes, ano, mes) {
+  const chaveMes = `${ano}-${String(mes).padStart(2, '0')}`
+  const reais = transacoes.filter((t) => t.data.startsWith(chaveMes))
+
+  const fixasUnicas = obterDespesasFixasUnicas(transacoes)
+  const projecoes = projetarParaMes(fixasUnicas, ano, mes).filter((p) => {
+    const jaExiste = reais.some(
+      (t) =>
+        t.tipo === 'despesa' &&
+        t.fixa &&
+        t.descricao.trim().toLowerCase() === p.descricao.trim().toLowerCase() &&
+        t.categoria === p.categoria
+    )
+    return !jaExiste
+  })
+
+  return [...reais, ...projecoes]
 }
 
 // ---------- Componente: Dashboard ----------
@@ -83,7 +135,6 @@ function Dashboard({ transacoes }) {
 
   const saldo = receitas - despesas
 
-  // Agrupa despesas do mês por categoria
   const porCategoria = {}
   doMes
     .filter((t) => t.tipo === 'despesa')
@@ -94,11 +145,8 @@ function Dashboard({ transacoes }) {
 
   return (
     <div style={{ padding: 20 }}>
-      <h1 style={{ fontSize: 20, marginBottom: 20, color: '#fff' }}>
-        Olá! 👋
-      </h1>
+      <h1 style={{ fontSize: 20, marginBottom: 20, color: '#fff' }}>Olá! 👋</h1>
 
-      {/* Card de saldo */}
       <div
         style={{
           background: 'linear-gradient(135deg, #6366F1, #4F46E5)',
@@ -115,7 +163,6 @@ function Dashboard({ transacoes }) {
         </p>
       </div>
 
-      {/* Cards de receitas e despesas */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
         <div style={{ flex: 1, background: '#1E293B', borderRadius: 14, padding: 16 }}>
           <p style={{ color: '#94A3B8', fontSize: 12, marginBottom: 4 }}>Receitas</p>
@@ -131,7 +178,6 @@ function Dashboard({ transacoes }) {
         </div>
       </div>
 
-      {/* Despesas fixas */}
       {despesasFixas > 0 && (
         <div
           style={{
@@ -156,7 +202,6 @@ function Dashboard({ transacoes }) {
         </div>
       )}
 
-      {/* Gastos por categoria */}
       {categoriasOrdenadas.length > 0 && (
         <>
           <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 8 }}>
@@ -193,7 +238,6 @@ function Dashboard({ transacoes }) {
         </>
       )}
 
-      {/* Últimas transações */}
       <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 8 }}>
         Últimas transações
       </p>
@@ -296,11 +340,8 @@ function Adicionar({ onAdicionar }) {
 
   return (
     <div style={{ padding: 20 }}>
-      <h1 style={{ fontSize: 20, marginBottom: 20, color: '#fff' }}>
-        Nova transação
-      </h1>
+      <h1 style={{ fontSize: 20, marginBottom: 20, color: '#fff' }}>Nova transação</h1>
 
-      {/* Alternador Receita / Despesa */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         <button
           onClick={() => handleMudarTipo('despesa')}
@@ -333,11 +374,7 @@ function Adicionar({ onAdicionar }) {
       </div>
 
       <label style={{ color: '#94A3B8', fontSize: 13 }}>Categoria</label>
-      <select
-        style={inputStyle}
-        value={categoria}
-        onChange={(e) => setCategoria(e.target.value)}
-      >
+      <select style={inputStyle} value={categoria} onChange={(e) => setCategoria(e.target.value)}>
         {categoriasPara(tipo).map((c) => (
           <option key={c.id} value={c.id}>
             {c.icone} {c.label}
@@ -364,12 +401,7 @@ function Adicionar({ onAdicionar }) {
       />
 
       <label style={{ color: '#94A3B8', fontSize: 13 }}>Data</label>
-      <input
-        style={inputStyle}
-        type="date"
-        value={data}
-        onChange={(e) => setData(e.target.value)}
-      />
+      <input style={inputStyle} type="date" value={data} onChange={(e) => setData(e.target.value)} />
 
       {tipo === 'despesa' && (
         <label
@@ -415,11 +447,215 @@ function Adicionar({ onAdicionar }) {
   )
 }
 
+// ---------- Componente: Calendário ----------
+
+function Calendario({ transacoes }) {
+  const hoje = new Date()
+  const [visualizado, setVisualizado] = useState({
+    ano: hoje.getFullYear(),
+    mes: hoje.getMonth() + 1,
+  })
+  const [diaSelecionado, setDiaSelecionado] = useState(null)
+
+  const hojeStr = hoje.toISOString().slice(0, 10)
+  const nomesMeses = [
+    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+  ]
+  const diasSemana = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
+
+  const itens = itensDoMesComProjecao(transacoes, visualizado.ano, visualizado.mes)
+
+  const porDia = {}
+  itens.forEach((t) => {
+    porDia[t.data] = porDia[t.data] || []
+    porDia[t.data].push(t)
+  })
+
+  const diasNoMes = new Date(visualizado.ano, visualizado.mes, 0).getDate()
+  const primeiroDiaSemana = new Date(visualizado.ano, visualizado.mes - 1, 1).getDay()
+
+  function mudarMes(delta) {
+    let novoMes = visualizado.mes + delta
+    let novoAno = visualizado.ano
+    if (novoMes > 12) { novoMes = 1; novoAno += 1 }
+    if (novoMes < 1) { novoMes = 12; novoAno -= 1 }
+    setVisualizado({ ano: novoAno, mes: novoMes })
+    setDiaSelecionado(null)
+  }
+
+  const itensProximoMes = itensDoMesComProjecao(
+    transacoes,
+    visualizado.mes === 12 ? visualizado.ano + 1 : visualizado.ano,
+    visualizado.mes === 12 ? 1 : visualizado.mes + 1
+  )
+  const proximosVencimentos = [...itens, ...itensProximoMes]
+    .filter((t) => t.tipo === 'despesa' && t.data >= hojeStr)
+    .sort((a, b) => new Date(a.data) - new Date(b.data))
+    .slice(0, 5)
+
+  const celulas = []
+  for (let i = 0; i < primeiroDiaSemana; i++) celulas.push(null)
+  for (let dia = 1; dia <= diasNoMes; dia++) celulas.push(dia)
+
+  return (
+    <div style={{ padding: 20 }}>
+      <h1 style={{ fontSize: 20, marginBottom: 20, color: '#fff' }}>Calendário</h1>
+
+      {proximosVencimentos.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 8 }}>
+            Próximos vencimentos
+          </p>
+          {proximosVencimentos.map((t) => {
+            const cat = infoCategoria('despesa', t.categoria)
+            return (
+              <div
+                key={t.id}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  background: '#1E293B',
+                  borderRadius: 12,
+                  padding: '10px 14px',
+                  marginBottom: 8,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 16 }}>{cat.icone}</span>
+                  <div>
+                    <p style={{ color: '#fff', fontSize: 13 }}>
+                      {t.descricao} {t.projetada && <span style={{ color: '#64748B' }}>(previsto)</span>}
+                    </p>
+                    <p style={{ color: '#64748B', fontSize: 11 }}>{formatarDataCurta(t.data)}</p>
+                  </div>
+                </div>
+                <p style={{ color: '#F59E0B', fontSize: 13, fontWeight: 600 }}>
+                  {formatarMoeda(t.valor)}
+                </p>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <button
+          onClick={() => mudarMes(-1)}
+          style={{ background: '#1E293B', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 12px', fontSize: 16 }}
+        >
+          ‹
+        </button>
+        <p style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>
+          {nomesMeses[visualizado.mes - 1]} {visualizado.ano}
+        </p>
+        <button
+          onClick={() => mudarMes(1)}
+          style={{ background: '#1E293B', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 12px', fontSize: 16 }}
+        >
+          ›
+        </button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 8 }}>
+        {diasSemana.map((d, i) => (
+          <div key={i} style={{ textAlign: 'center', color: '#64748B', fontSize: 11 }}>
+            {d}
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 20 }}>
+        {celulas.map((dia, i) => {
+          if (dia === null) return <div key={i} />
+          const dataStr = `${visualizado.ano}-${String(visualizado.mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
+          const itensDoDia = porDia[dataStr] || []
+          const temReceita = itensDoDia.some((t) => t.tipo === 'receita')
+          const temDespesaReal = itensDoDia.some((t) => t.tipo === 'despesa' && !t.projetada)
+          const temDespesaPrevista = itensDoDia.some((t) => t.tipo === 'despesa' && t.projetada)
+          const ehHoje = dataStr === hojeStr
+          const selecionado = dataStr === diaSelecionado
+
+          return (
+            <button
+              key={i}
+              onClick={() => setDiaSelecionado(selecionado ? null : dataStr)}
+              style={{
+                aspectRatio: '1',
+                background: selecionado ? '#6366F1' : '#1E293B',
+                border: ehHoje ? '1px solid #6366F1' : 'none',
+                borderRadius: 8,
+                color: '#fff',
+                fontSize: 13,
+                position: 'relative',
+                padding: 0,
+              }}
+            >
+              {dia}
+              <div style={{ position: 'absolute', bottom: 4, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 2 }}>
+                {temReceita && <span style={{ width: 4, height: 4, borderRadius: 4, background: '#22C55E' }} />}
+                {temDespesaReal && <span style={{ width: 4, height: 4, borderRadius: 4, background: '#EF4444' }} />}
+                {temDespesaPrevista && <span style={{ width: 4, height: 4, borderRadius: 4, border: '1px solid #F59E0B' }} />}
+              </div>
+            </button>
+          )
+        })}
+      </div>
+
+      {diaSelecionado && (
+        <div>
+          <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 8 }}>
+            {formatarDataCurta(diaSelecionado)}
+          </p>
+          {(porDia[diaSelecionado] || []).length === 0 && (
+            <p style={{ color: '#64748B', fontSize: 14 }}>Nada nesse dia.</p>
+          )}
+          {(porDia[diaSelecionado] || []).map((t) => {
+            const cat = infoCategoria(t.tipo, t.categoria)
+            return (
+              <div
+                key={t.id}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  background: '#1E293B',
+                  borderRadius: 12,
+                  padding: '12px 16px',
+                  marginBottom: 8,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 18 }}>{cat.icone}</span>
+                  <p style={{ color: '#fff', fontSize: 14 }}>
+                    {t.descricao} {t.projetada && <span style={{ color: '#64748B', fontSize: 12 }}>(previsto)</span>}
+                  </p>
+                </div>
+                <p
+                  style={{
+                    color: t.tipo === 'receita' ? '#22C55E' : '#EF4444',
+                    fontSize: 14,
+                    fontWeight: 600,
+                  }}
+                >
+                  {t.tipo === 'receita' ? '+' : '-'} {formatarMoeda(t.valor)}
+                </p>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ---------- Componente: Navegação inferior ----------
 
 function BottomNav({ abaAtiva, onMudarAba }) {
   const abas = [
     { id: 'dashboard', label: 'Início', icone: '🏠' },
+    { id: 'calendario', label: 'Calendário', icone: '📅' },
     { id: 'adicionar', label: 'Adicionar', icone: '➕' },
   ]
 
@@ -481,6 +717,7 @@ export default function App() {
       }}
     >
       {abaAtiva === 'dashboard' && <Dashboard transacoes={transacoes} />}
+      {abaAtiva === 'calendario' && <Calendario transacoes={transacoes} />}
       {abaAtiva === 'adicionar' && <Adicionar onAdicionar={handleAdicionar} />}
 
       <BottomNav abaAtiva={abaAtiva} onMudarAba={setAbaAtiva} />
