@@ -1,5 +1,36 @@
 import { useState, useEffect } from 'react'
 
+// ---------- Categorias ----------
+
+const CATEGORIAS_DESPESA = [
+  { id: 'mercado', label: 'Mercado', icone: '🛒' },
+  { id: 'transporte', label: 'Transporte', icone: '🚗' },
+  { id: 'lazer', label: 'Lazer', icone: '🎉' },
+  { id: 'saude', label: 'Saúde', icone: '💊' },
+  { id: 'educacao', label: 'Educação', icone: '📚' },
+  { id: 'casa', label: 'Casa', icone: '🏠' },
+  { id: 'assinaturas', label: 'Assinaturas', icone: '📺' },
+  { id: 'filhos', label: 'Filhos', icone: '🧸' },
+  { id: 'outros', label: 'Outros', icone: '📦' },
+]
+
+const CATEGORIAS_RECEITA = [
+  { id: 'salario', label: 'Salário', icone: '💼' },
+  { id: 'freela', label: 'Freelance', icone: '💻' },
+  { id: 'pix', label: 'Pix recebido', icone: '📲' },
+  { id: 'rendimento', label: 'Rendimento', icone: '📈' },
+  { id: 'outros', label: 'Outros', icone: '📦' },
+]
+
+function categoriasPara(tipo) {
+  return tipo === 'receita' ? CATEGORIAS_RECEITA : CATEGORIAS_DESPESA
+}
+
+function infoCategoria(tipo, categoriaId) {
+  const lista = categoriasPara(tipo)
+  return lista.find((c) => c.id === categoriaId) || lista[lista.length - 1]
+}
+
 // ---------- Funções auxiliares ----------
 
 function formatarMoeda(valor) {
@@ -16,7 +47,14 @@ function mesAtual() {
 function carregarTransacoes() {
   try {
     const dados = localStorage.getItem('transacoes')
-    return dados ? JSON.parse(dados) : []
+    if (!dados) return []
+    const lista = JSON.parse(dados)
+    // Migração: transações antigas (Fase 1) não tinham categoria/fixa
+    return lista.map((t) => ({
+      categoria: 'outros',
+      fixa: false,
+      ...t,
+    }))
   } catch {
     return []
   }
@@ -39,7 +77,20 @@ function Dashboard({ transacoes }) {
     .filter((t) => t.tipo === 'despesa')
     .reduce((soma, t) => soma + t.valor, 0)
 
+  const despesasFixas = doMes
+    .filter((t) => t.tipo === 'despesa' && t.fixa)
+    .reduce((soma, t) => soma + t.valor, 0)
+
   const saldo = receitas - despesas
+
+  // Agrupa despesas do mês por categoria
+  const porCategoria = {}
+  doMes
+    .filter((t) => t.tipo === 'despesa')
+    .forEach((t) => {
+      porCategoria[t.categoria] = (porCategoria[t.categoria] || 0) + t.valor
+    })
+  const categoriasOrdenadas = Object.entries(porCategoria).sort((a, b) => b[1] - a[1])
 
   return (
     <div style={{ padding: 20 }}>
@@ -66,37 +117,81 @@ function Dashboard({ transacoes }) {
 
       {/* Cards de receitas e despesas */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-        <div
-          style={{
-            flex: 1,
-            background: '#1E293B',
-            borderRadius: 14,
-            padding: 16,
-          }}
-        >
-          <p style={{ color: '#94A3B8', fontSize: 12, marginBottom: 4 }}>
-            Receitas
-          </p>
+        <div style={{ flex: 1, background: '#1E293B', borderRadius: 14, padding: 16 }}>
+          <p style={{ color: '#94A3B8', fontSize: 12, marginBottom: 4 }}>Receitas</p>
           <p style={{ color: '#22C55E', fontSize: 18, fontWeight: 600 }}>
             {formatarMoeda(receitas)}
           </p>
         </div>
-        <div
-          style={{
-            flex: 1,
-            background: '#1E293B',
-            borderRadius: 14,
-            padding: 16,
-          }}
-        >
-          <p style={{ color: '#94A3B8', fontSize: 12, marginBottom: 4 }}>
-            Despesas
-          </p>
+        <div style={{ flex: 1, background: '#1E293B', borderRadius: 14, padding: 16 }}>
+          <p style={{ color: '#94A3B8', fontSize: 12, marginBottom: 4 }}>Despesas</p>
           <p style={{ color: '#EF4444', fontSize: 18, fontWeight: 600 }}>
             {formatarMoeda(despesas)}
           </p>
         </div>
       </div>
+
+      {/* Despesas fixas */}
+      {despesasFixas > 0 && (
+        <div
+          style={{
+            background: '#1E293B',
+            borderRadius: 14,
+            padding: 16,
+            marginBottom: 16,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <div>
+            <p style={{ color: '#94A3B8', fontSize: 12 }}>📌 Despesas fixas do mês</p>
+            <p style={{ color: '#F59E0B', fontSize: 16, fontWeight: 600 }}>
+              {formatarMoeda(despesasFixas)}
+            </p>
+          </div>
+          <p style={{ color: '#64748B', fontSize: 12 }}>
+            {Math.round((despesasFixas / (despesas || 1)) * 100)}% dos gastos
+          </p>
+        </div>
+      )}
+
+      {/* Gastos por categoria */}
+      {categoriasOrdenadas.length > 0 && (
+        <>
+          <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 8 }}>
+            Gastos por categoria
+          </p>
+          <div style={{ marginBottom: 16 }}>
+            {categoriasOrdenadas.map(([catId, valor]) => {
+              const cat = infoCategoria('despesa', catId)
+              const percentual = despesas > 0 ? (valor / despesas) * 100 : 0
+              return (
+                <div key={catId} style={{ marginBottom: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <span style={{ color: '#fff', fontSize: 13 }}>
+                      {cat.icone} {cat.label}
+                    </span>
+                    <span style={{ color: '#94A3B8', fontSize: 13 }}>
+                      {formatarMoeda(valor)}
+                    </span>
+                  </div>
+                  <div style={{ background: '#1E293B', borderRadius: 6, height: 6 }}>
+                    <div
+                      style={{
+                        width: `${percentual}%`,
+                        background: '#6366F1',
+                        height: 6,
+                        borderRadius: 6,
+                      }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
 
       {/* Últimas transações */}
       <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 8 }}>
@@ -110,33 +205,44 @@ function Dashboard({ transacoes }) {
       {[...doMes]
         .sort((a, b) => new Date(b.data) - new Date(a.data))
         .slice(0, 10)
-        .map((t) => (
-          <div
-            key={t.id}
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              background: '#1E293B',
-              borderRadius: 12,
-              padding: '12px 16px',
-              marginBottom: 8,
-            }}
-          >
-            <div>
-              <p style={{ color: '#fff', fontSize: 14 }}>{t.descricao}</p>
-              <p style={{ color: '#64748B', fontSize: 12 }}>{t.data}</p>
-            </div>
-            <p
+        .map((t) => {
+          const cat = infoCategoria(t.tipo, t.categoria)
+          return (
+            <div
+              key={t.id}
               style={{
-                color: t.tipo === 'receita' ? '#22C55E' : '#EF4444',
-                fontSize: 14,
-                fontWeight: 600,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                background: '#1E293B',
+                borderRadius: 12,
+                padding: '12px 16px',
+                marginBottom: 8,
               }}
             >
-              {t.tipo === 'receita' ? '+' : '-'} {formatarMoeda(t.valor)}
-            </p>
-          </div>
-        ))}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 18 }}>{cat.icone}</span>
+                <div>
+                  <p style={{ color: '#fff', fontSize: 14 }}>
+                    {t.descricao} {t.fixa && <span style={{ color: '#F59E0B' }}>📌</span>}
+                  </p>
+                  <p style={{ color: '#64748B', fontSize: 12 }}>
+                    {cat.label} · {t.data}
+                  </p>
+                </div>
+              </div>
+              <p
+                style={{
+                  color: t.tipo === 'receita' ? '#22C55E' : '#EF4444',
+                  fontSize: 14,
+                  fontWeight: 600,
+                }}
+              >
+                {t.tipo === 'receita' ? '+' : '-'} {formatarMoeda(t.valor)}
+              </p>
+            </div>
+          )
+        })}
     </div>
   )
 }
@@ -145,9 +251,17 @@ function Dashboard({ transacoes }) {
 
 function Adicionar({ onAdicionar }) {
   const [tipo, setTipo] = useState('despesa')
+  const [categoria, setCategoria] = useState(CATEGORIAS_DESPESA[0].id)
   const [descricao, setDescricao] = useState('')
   const [valor, setValor] = useState('')
   const [data, setData] = useState(new Date().toISOString().slice(0, 10))
+  const [fixa, setFixa] = useState(false)
+
+  function handleMudarTipo(novoTipo) {
+    setTipo(novoTipo)
+    setCategoria(categoriasPara(novoTipo)[0].id)
+    if (novoTipo === 'receita') setFixa(false)
+  }
 
   function handleSalvar() {
     if (!descricao.trim() || !valor || Number(valor) <= 0) {
@@ -157,12 +271,15 @@ function Adicionar({ onAdicionar }) {
     onAdicionar({
       id: Date.now(),
       tipo,
+      categoria,
       descricao: descricao.trim(),
       valor: Number(valor),
       data,
+      fixa: tipo === 'despesa' ? fixa : false,
     })
     setDescricao('')
     setValor('')
+    setFixa(false)
   }
 
   const inputStyle = {
@@ -186,7 +303,7 @@ function Adicionar({ onAdicionar }) {
       {/* Alternador Receita / Despesa */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         <button
-          onClick={() => setTipo('despesa')}
+          onClick={() => handleMudarTipo('despesa')}
           style={{
             flex: 1,
             padding: 12,
@@ -200,7 +317,7 @@ function Adicionar({ onAdicionar }) {
           Despesa
         </button>
         <button
-          onClick={() => setTipo('receita')}
+          onClick={() => handleMudarTipo('receita')}
           style={{
             flex: 1,
             padding: 12,
@@ -214,6 +331,19 @@ function Adicionar({ onAdicionar }) {
           Receita
         </button>
       </div>
+
+      <label style={{ color: '#94A3B8', fontSize: 13 }}>Categoria</label>
+      <select
+        style={inputStyle}
+        value={categoria}
+        onChange={(e) => setCategoria(e.target.value)}
+      >
+        {categoriasPara(tipo).map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.icone} {c.label}
+          </option>
+        ))}
+      </select>
 
       <label style={{ color: '#94A3B8', fontSize: 13 }}>Descrição</label>
       <input
@@ -240,6 +370,30 @@ function Adicionar({ onAdicionar }) {
         value={data}
         onChange={(e) => setData(e.target.value)}
       />
+
+      {tipo === 'despesa' && (
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            color: '#fff',
+            fontSize: 14,
+            marginBottom: 16,
+            background: '#1E293B',
+            padding: '12px 14px',
+            borderRadius: 10,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={fixa}
+            onChange={(e) => setFixa(e.target.checked)}
+            style={{ width: 18, height: 18 }}
+          />
+          📌 Essa despesa se repete todo mês (fixa)
+        </label>
+      )}
 
       <button
         onClick={handleSalvar}
@@ -308,7 +462,6 @@ export default function App() {
   const [transacoes, setTransacoes] = useState(carregarTransacoes)
   const [abaAtiva, setAbaAtiva] = useState('dashboard')
 
-  // Salva automaticamente sempre que as transações mudarem
   useEffect(() => {
     salvarTransacoes(transacoes)
   }, [transacoes])
@@ -334,4 +487,3 @@ export default function App() {
     </div>
   )
 }
-
