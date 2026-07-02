@@ -116,6 +116,75 @@ function itensDoMesComProjecao(transacoes, ano, mes) {
   return [...reais, ...projecoes]
 }
 
+// ---------- Persistência: Cartões e Compras ----------
+
+function carregarCartoes() {
+  try {
+    const dados = localStorage.getItem('cartoes')
+    return dados ? JSON.parse(dados) : []
+  } catch {
+    return []
+  }
+}
+
+function salvarCartoes(cartoes) {
+  localStorage.setItem('cartoes', JSON.stringify(cartoes))
+}
+
+function carregarCompras() {
+  try {
+    const dados = localStorage.getItem('compras')
+    return dados ? JSON.parse(dados) : []
+  } catch {
+    return []
+  }
+}
+
+function salvarCompras(compras) {
+  localStorage.setItem('compras', JSON.stringify(compras))
+}
+
+// Calcula em qual fatura (mês) cada parcela de uma compra cai
+function calcularParcelas(compra, cartao) {
+  const [ano, mes, dia] = compra.data.split('-').map(Number)
+  let anoFatura = ano
+  let mesFatura = mes
+  if (dia > cartao.diaFechamento) {
+    mesFatura += 1
+    if (mesFatura > 12) {
+      mesFatura = 1
+      anoFatura += 1
+    }
+  }
+  const valorParcela = Math.round((compra.valorTotal / compra.parcelas) * 100) / 100
+  const parcelas = []
+  for (let i = 0; i < compra.parcelas; i++) {
+    let m = mesFatura + i
+    let a = anoFatura
+    while (m > 12) {
+      m -= 12
+      a += 1
+    }
+    parcelas.push({
+      chaveMes: `${a}-${String(m).padStart(2, '0')}`,
+      numero: i + 1,
+      total: compra.parcelas,
+      valor: valorParcela,
+      compraId: compra.id,
+      descricao: compra.descricao,
+      categoria: compra.categoria,
+    })
+  }
+  return parcelas
+}
+
+// Retorna todas as parcelas de todas as compras de um cartão específico
+function parcelasDoCartao(compras, cartao) {
+  return compras
+    .filter((c) => c.cartaoId === cartao.id)
+    .flatMap((c) => calcularParcelas(c, cartao))
+}
+
 // ---------- Componente: Dashboard ----------
 
 function Dashboard({ transacoes }) {
@@ -650,12 +719,389 @@ function Calendario({ transacoes }) {
   )
 }
 
+// ---------- Componente: Formulário Novo Cartão ----------
+
+function FormNovoCartao({ onSalvar, onCancelar }) {
+  const [nome, setNome] = useState('')
+  const [banco, setBanco] = useState('')
+  const [limite, setLimite] = useState('')
+  const [diaFechamento, setDiaFechamento] = useState('')
+  const [diaVencimento, setDiaVencimento] = useState('')
+
+  const inputStyle = {
+    width: '100%',
+    padding: '12px 14px',
+    borderRadius: 10,
+    border: '1px solid #334155',
+    background: '#0F172A',
+    color: '#fff',
+    fontSize: 15,
+    marginBottom: 14,
+    boxSizing: 'border-box',
+  }
+
+  function handleSalvar() {
+    if (!nome.trim() || !limite || !diaFechamento || !diaVencimento) {
+      alert('Preencha nome, limite, dia de fechamento e vencimento.')
+      return
+    }
+    const fechamento = Number(diaFechamento)
+    const vencimento = Number(diaVencimento)
+    if (fechamento < 1 || fechamento > 31 || vencimento < 1 || vencimento > 31) {
+      alert('Os dias devem estar entre 1 e 31.')
+      return
+    }
+    onSalvar({
+      id: Date.now(),
+      nome: nome.trim(),
+      banco: banco.trim(),
+      limite: Number(limite),
+      diaFechamento: fechamento,
+      diaVencimento: vencimento,
+    })
+  }
+
+  return (
+    <div style={{ background: '#1E293B', borderRadius: 14, padding: 16, marginBottom: 16 }}>
+      <p style={{ color: '#fff', fontSize: 15, fontWeight: 600, marginBottom: 12 }}>
+        Novo cartão
+      </p>
+      <label style={{ color: '#94A3B8', fontSize: 13 }}>Nome do cartão</label>
+      <input
+        style={inputStyle}
+        placeholder="Ex: Nubank, Inter..."
+        value={nome}
+        onChange={(e) => setNome(e.target.value)}
+      />
+      <label style={{ color: '#94A3B8', fontSize: 13 }}>Banco (opcional)</label>
+      <input
+        style={inputStyle}
+        placeholder="Ex: Nubank"
+        value={banco}
+        onChange={(e) => setBanco(e.target.value)}
+      />
+      <label style={{ color: '#94A3B8', fontSize: 13 }}>Limite total (R$)</label>
+      <input
+        style={inputStyle}
+        type="number"
+        inputMode="decimal"
+        placeholder="0,00"
+        value={limite}
+        onChange={(e) => setLimite(e.target.value)}
+      />
+      <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ flex: 1 }}>
+          <label style={{ color: '#94A3B8', fontSize: 13 }}>Dia fechamento</label>
+          <input
+            style={inputStyle}
+            type="number"
+            inputMode="numeric"
+            placeholder="Ex: 20"
+            value={diaFechamento}
+            onChange={(e) => setDiaFechamento(e.target.value)}
+          />
+        </div>
+        <div style={{ flex: 1 }}>
+          <label style={{ color: '#94A3B8', fontSize: 13 }}>Dia vencimento</label>
+          <input
+            style={inputStyle}
+            type="number"
+            inputMode="numeric"
+            placeholder="Ex: 27"
+            value={diaVencimento}
+            onChange={(e) => setDiaVencimento(e.target.value)}
+          />
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button
+          onClick={onCancelar}
+          style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#334155', color: '#fff', fontWeight: 600 }}
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={handleSalvar}
+          style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
+        >
+          Salvar
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ---------- Componente: Formulário Nova Compra no Cartão ----------
+
+function FormNovaCompra({ onSalvar, onCancelar }) {
+  const [descricao, setDescricao] = useState('')
+  const [categoria, setCategoria] = useState(CATEGORIAS_DESPESA[0].id)
+  const [valorTotal, setValorTotal] = useState('')
+  const [parcelas, setParcelas] = useState('1')
+  const [data, setData] = useState(new Date().toISOString().slice(0, 10))
+
+  const inputStyle = {
+    width: '100%',
+    padding: '12px 14px',
+    borderRadius: 10,
+    border: '1px solid #334155',
+    background: '#0F172A',
+    color: '#fff',
+    fontSize: 15,
+    marginBottom: 14,
+    boxSizing: 'border-box',
+  }
+
+  function handleSalvar() {
+    if (!descricao.trim() || !valorTotal || Number(valorTotal) <= 0 || !parcelas || Number(parcelas) < 1) {
+      alert('Preencha a descrição, o valor total e o número de parcelas.')
+      return
+    }
+    onSalvar({
+      id: Date.now(),
+      descricao: descricao.trim(),
+      categoria,
+      valorTotal: Number(valorTotal),
+      parcelas: Number(parcelas),
+      data,
+    })
+  }
+
+  return (
+    <div style={{ background: '#1E293B', borderRadius: 14, padding: 16, marginBottom: 16 }}>
+      <p style={{ color: '#fff', fontSize: 15, fontWeight: 600, marginBottom: 12 }}>
+        Nova compra
+      </p>
+      <label style={{ color: '#94A3B8', fontSize: 13 }}>Descrição</label>
+      <input
+        style={inputStyle}
+        placeholder="Ex: Tênis, Presente..."
+        value={descricao}
+        onChange={(e) => setDescricao(e.target.value)}
+      />
+      <label style={{ color: '#94A3B8', fontSize: 13 }}>Categoria</label>
+      <select style={inputStyle} value={categoria} onChange={(e) => setCategoria(e.target.value)}>
+        {CATEGORIAS_DESPESA.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.icone} {c.label}
+          </option>
+        ))}
+      </select>
+      <label style={{ color: '#94A3B8', fontSize: 13 }}>Valor total (R$)</label>
+      <input
+        style={inputStyle}
+        type="number"
+        inputMode="decimal"
+        placeholder="0,00"
+        value={valorTotal}
+        onChange={(e) => setValorTotal(e.target.value)}
+      />
+      <label style={{ color: '#94A3B8', fontSize: 13 }}>Número de parcelas</label>
+      <input
+        style={inputStyle}
+        type="number"
+        inputMode="numeric"
+        min="1"
+        value={parcelas}
+        onChange={(e) => setParcelas(e.target.value)}
+      />
+      <label style={{ color: '#94A3B8', fontSize: 13 }}>Data da compra</label>
+      <input style={inputStyle} type="date" value={data} onChange={(e) => setData(e.target.value)} />
+
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button
+          onClick={onCancelar}
+          style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#334155', color: '#fff', fontWeight: 600 }}
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={handleSalvar}
+          style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
+        >
+          Salvar
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ---------- Componente: Cartões ----------
+
+function Cartoes({ cartoes, compras, onAdicionarCartao, onAdicionarCompra }) {
+  const [mostrarFormCartao, setMostrarFormCartao] = useState(false)
+  const [cartaoExpandido, setCartaoExpandido] = useState(null)
+  const [mostrarFormCompraPara, setMostrarFormCompraPara] = useState(null)
+
+  const chaveMesAtual = mesAtual()
+
+  function chaveProximoMes(chave) {
+    const [ano, mes] = chave.split('-').map(Number)
+    const proximoMes = mes === 12 ? 1 : mes + 1
+    const proximoAno = mes === 12 ? ano + 1 : ano
+    return `${proximoAno}-${String(proximoMes).padStart(2, '0')}`
+  }
+
+  return (
+    <div style={{ padding: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <h1 style={{ fontSize: 20, color: '#fff' }}>Cartões</h1>
+        {!mostrarFormCartao && (
+          <button
+            onClick={() => setMostrarFormCartao(true)}
+            style={{ background: '#6366F1', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600 }}
+          >
+            + Cartão
+          </button>
+        )}
+      </div>
+
+      {mostrarFormCartao && (
+        <FormNovoCartao
+          onSalvar={(cartao) => {
+            onAdicionarCartao(cartao)
+            setMostrarFormCartao(false)
+          }}
+          onCancelar={() => setMostrarFormCartao(false)}
+        />
+      )}
+
+      {cartoes.length === 0 && !mostrarFormCartao && (
+        <p style={{ color: '#64748B', fontSize: 14 }}>
+          Nenhum cartão cadastrado ainda. Toque em "+ Cartão" pra começar.
+        </p>
+      )}
+
+      {cartoes.map((cartao) => {
+        const todasParcelas = parcelasDoCartao(compras, cartao)
+        const faturaAtual = todasParcelas
+          .filter((p) => p.chaveMes === chaveMesAtual)
+          .reduce((soma, p) => soma + p.valor, 0)
+        const proximaFatura = todasParcelas
+          .filter((p) => p.chaveMes === chaveProximoMes(chaveMesAtual))
+          .reduce((soma, p) => soma + p.valor, 0)
+        const emAberto = todasParcelas
+          .filter((p) => p.chaveMes >= chaveMesAtual)
+          .reduce((soma, p) => soma + p.valor, 0)
+        const disponivel = cartao.limite - emAberto
+        const expandido = cartaoExpandido === cartao.id
+
+        const parcelasFuturas = todasParcelas
+          .filter((p) => p.chaveMes >= chaveMesAtual)
+          .sort((a, b) => a.chaveMes.localeCompare(b.chaveMes))
+
+        return (
+          <div key={cartao.id} style={{ marginBottom: 16 }}>
+            <button
+              onClick={() => setCartaoExpandido(expandido ? null : cartao.id)}
+              style={{
+                width: '100%',
+                textAlign: 'left',
+                background: 'linear-gradient(135deg, #4F46E5, #6366F1)',
+                borderRadius: 16,
+                padding: 18,
+                border: 'none',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                <p style={{ color: '#fff', fontSize: 15, fontWeight: 700 }}>{cartao.nome}</p>
+                <p style={{ color: '#E0E7FF', fontSize: 12 }}>vence dia {cartao.diaVencimento}</p>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div>
+                  <p style={{ color: '#E0E7FF', fontSize: 11 }}>Fatura atual</p>
+                  <p style={{ color: '#fff', fontSize: 18, fontWeight: 700 }}>{formatarMoeda(faturaAtual)}</p>
+                </div>
+                <div>
+                  <p style={{ color: '#E0E7FF', fontSize: 11 }}>Disponível</p>
+                  <p style={{ color: '#fff', fontSize: 18, fontWeight: 700 }}>{formatarMoeda(disponivel)}</p>
+                </div>
+              </div>
+            </button>
+
+            {expandido && (
+              <div style={{ background: '#1E293B', borderRadius: 14, padding: 16, marginTop: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <p style={{ color: '#94A3B8', fontSize: 13 }}>
+                    Próxima fatura: <span style={{ color: '#fff' }}>{formatarMoeda(proximaFatura)}</span>
+                  </p>
+                  <p style={{ color: '#94A3B8', fontSize: 13 }}>Fecha dia {cartao.diaFechamento}</p>
+                </div>
+
+                {mostrarFormCompraPara === cartao.id ? (
+                  <FormNovaCompra
+                    onSalvar={(compra) => {
+                      onAdicionarCompra({ ...compra, cartaoId: cartao.id })
+                      setMostrarFormCompraPara(null)
+                    }}
+                    onCancelar={() => setMostrarFormCompraPara(null)}
+                  />
+                ) : (
+                  <button
+                    onClick={() => setMostrarFormCompraPara(cartao.id)}
+                    style={{
+                      width: '100%',
+                      padding: 12,
+                      borderRadius: 10,
+                      border: '1px dashed #6366F1',
+                      background: 'transparent',
+                      color: '#6366F1',
+                      fontWeight: 600,
+                      marginBottom: 12,
+                    }}
+                  >
+                    + Nova compra
+                  </button>
+                )}
+
+                <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 8 }}>Parcelas em aberto</p>
+                {parcelasFuturas.length === 0 && (
+                  <p style={{ color: '#64748B', fontSize: 13 }}>Nenhuma compra em aberto.</p>
+                )}
+                {parcelasFuturas.map((p, i) => {
+                  const cat = infoCategoria('despesa', p.categoria)
+                  return (
+                    <div
+                      key={`${p.compraId}-${p.numero}-${i}`}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '10px 0',
+                        borderBottom: '1px solid #334155',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 15 }}>{cat.icone}</span>
+                        <div>
+                          <p style={{ color: '#fff', fontSize: 13 }}>{p.descricao}</p>
+                          <p style={{ color: '#64748B', fontSize: 11 }}>
+                            {p.chaveMes} · parcela {p.numero}/{p.total}
+                          </p>
+                        </div>
+                      </div>
+                      <p style={{ color: '#F59E0B', fontSize: 13, fontWeight: 600 }}>
+                        {formatarMoeda(p.valor)}
+                      </p>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ---------- Componente: Navegação inferior ----------
 
 function BottomNav({ abaAtiva, onMudarAba }) {
   const abas = [
     { id: 'dashboard', label: 'Início', icone: '🏠' },
     { id: 'calendario', label: 'Calendário', icone: '📅' },
+    { id: 'cartoes', label: 'Cartões', icone: '💳' },
     { id: 'adicionar', label: 'Adicionar', icone: '➕' },
   ]
 
@@ -696,15 +1142,33 @@ function BottomNav({ abaAtiva, onMudarAba }) {
 
 export default function App() {
   const [transacoes, setTransacoes] = useState(carregarTransacoes)
+  const [cartoes, setCartoes] = useState(carregarCartoes)
+  const [compras, setCompras] = useState(carregarCompras)
   const [abaAtiva, setAbaAtiva] = useState('dashboard')
 
   useEffect(() => {
     salvarTransacoes(transacoes)
   }, [transacoes])
 
+  useEffect(() => {
+    salvarCartoes(cartoes)
+  }, [cartoes])
+
+  useEffect(() => {
+    salvarCompras(compras)
+  }, [compras])
+
   function handleAdicionar(novaTransacao) {
     setTransacoes((atual) => [...atual, novaTransacao])
     setAbaAtiva('dashboard')
+  }
+
+  function handleAdicionarCartao(novoCartao) {
+    setCartoes((atual) => [...atual, novoCartao])
+  }
+
+  function handleAdicionarCompra(novaCompra) {
+    setCompras((atual) => [...atual, novaCompra])
   }
 
   return (
@@ -718,6 +1182,14 @@ export default function App() {
     >
       {abaAtiva === 'dashboard' && <Dashboard transacoes={transacoes} />}
       {abaAtiva === 'calendario' && <Calendario transacoes={transacoes} />}
+      {abaAtiva === 'cartoes' && (
+        <Cartoes
+          cartoes={cartoes}
+          compras={compras}
+          onAdicionarCartao={handleAdicionarCartao}
+          onAdicionarCompra={handleAdicionarCompra}
+        />
+      )}
       {abaAtiva === 'adicionar' && <Adicionar onAdicionar={handleAdicionar} />}
 
       <BottomNav abaAtiva={abaAtiva} onMudarAba={setAbaAtiva} />
