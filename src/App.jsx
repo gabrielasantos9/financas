@@ -326,9 +326,56 @@ function calcularResumoMensal(transacoes, quantidadeMeses) {
   })
 }
 
+// ---------- Persistência: Filhos ----------
+
+function carregarFilhos() {
+  try {
+    const dados = localStorage.getItem('filhos')
+    return dados ? JSON.parse(dados) : []
+  } catch {
+    return []
+  }
+}
+
+function salvarFilhos(filhos) {
+  localStorage.setItem('filhos', JSON.stringify(filhos))
+}
+
+// Monta um resumo financeiro compacto pra enviar à IA (não envia a lista completa de transações)
+function construirContextoIA(transacoes, metas, reserva, cartoes) {
+  const hojeStr = new Date().toISOString().slice(0, 10)
+  const chaveMes = mesAtual()
+  const doMes = transacoes.filter((t) => t.data.startsWith(chaveMes))
+
+  const receitasMes = doMes.filter((t) => t.tipo === 'receita').reduce((s, t) => s + t.valor, 0)
+  const despesasMes = doMes.filter((t) => t.tipo === 'despesa').reduce((s, t) => s + t.valor, 0)
+  const saldoTotal = transacoes
+    .filter((t) => t.data <= hojeStr)
+    .reduce((s, t) => s + (t.tipo === 'receita' ? t.valor : -t.valor), 0)
+
+  const porCategoria = {}
+  doMes
+    .filter((t) => t.tipo === 'despesa')
+    .forEach((t) => {
+      porCategoria[t.categoria] = (porCategoria[t.categoria] || 0) + t.valor
+    })
+
+  return {
+    saldoTotalHoje: Number(saldoTotal.toFixed(2)),
+    receitasEsteMes: Number(receitasMes.toFixed(2)),
+    despesasEsteMes: Number(despesasMes.toFixed(2)),
+    gastosPorCategoriaEsteMes: porCategoria,
+    metas: metas.map((m) => ({ nome: m.nome, jaGuardado: m.valorAtual, alvo: m.valorAlvo })),
+    reservaDeEmergencia: reserva
+      ? { jaGuardado: reserva.valorAtual, mesesDesejados: reserva.mesesDesejados }
+      : null,
+    quantidadeDeCartoes: cartoes.length,
+  }
+}
+
 // ---------- Componente: Dashboard ----------
 
-function Dashboard({ transacoes, onEditar, onExcluir, onAbrirPlanejamento, onAbrirRelatorios }) {
+function Dashboard({ transacoes, onEditar, onExcluir, onAbrirPlanejamento, onAbrirRelatorios, onAbrirFilhos, onAbrirAssistente }) {
   const hojeStr = new Date().toISOString().slice(0, 10)
   const doMes = transacoes.filter((t) => t.data.startsWith(mesAtual()))
 
@@ -364,7 +411,7 @@ function Dashboard({ transacoes, onEditar, onExcluir, onAbrirPlanejamento, onAbr
     <div style={{ padding: 20 }}>
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 20, color: '#fff', marginBottom: 10 }}>Olá! 👋</h1>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
           <button
             onClick={onAbrirPlanejamento}
             style={{ flex: 1, background: '#1E293B', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 10px', fontSize: 12 }}
@@ -376,6 +423,20 @@ function Dashboard({ transacoes, onEditar, onExcluir, onAbrirPlanejamento, onAbr
             style={{ flex: 1, background: '#1E293B', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 10px', fontSize: 12 }}
           >
             📊 Relatórios
+          </button>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={onAbrirFilhos}
+            style={{ flex: 1, background: '#1E293B', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 10px', fontSize: 12 }}
+          >
+            👶 Filhos
+          </button>
+          <button
+            onClick={onAbrirAssistente}
+            style={{ flex: 1, background: '#1E293B', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 10px', fontSize: 12 }}
+          >
+            🤖 Assistente IA
           </button>
         </div>
       </div>
@@ -559,13 +620,14 @@ function Dashboard({ transacoes, onEditar, onExcluir, onAbrirPlanejamento, onAbr
 
 // ---------- Componente: Adicionar ----------
 
-function Adicionar({ onAdicionar, onEditar, onCancelarEdicao, transacaoInicial }) {
+function Adicionar({ onAdicionar, onEditar, onCancelarEdicao, transacaoInicial, filhos }) {
   const [tipo, setTipo] = useState(transacaoInicial?.tipo || 'despesa')
   const [categoria, setCategoria] = useState(transacaoInicial?.categoria || CATEGORIAS_DESPESA[0].id)
   const [descricao, setDescricao] = useState(transacaoInicial?.descricao || '')
   const [valor, setValor] = useState(transacaoInicial ? String(transacaoInicial.valor) : '')
   const [data, setData] = useState(transacaoInicial?.data || new Date().toISOString().slice(0, 10))
   const [fixa, setFixa] = useState(transacaoInicial?.fixa || false)
+  const [filhoId, setFilhoId] = useState(transacaoInicial?.filhoId || '')
 
   const emEdicao = Boolean(transacaoInicial)
 
@@ -588,6 +650,7 @@ function Adicionar({ onAdicionar, onEditar, onCancelarEdicao, transacaoInicial }
       valor: Number(valor),
       data,
       fixa: tipo === 'despesa' ? fixa : false,
+      filhoId: tipo === 'despesa' && categoria === 'filhos' && filhoId ? filhoId : null,
     }
     if (emEdicao) {
       onEditar(dadosTransacao)
@@ -596,6 +659,7 @@ function Adicionar({ onAdicionar, onEditar, onCancelarEdicao, transacaoInicial }
       setDescricao('')
       setValor('')
       setFixa(false)
+      setFilhoId('')
     }
   }
 
@@ -677,6 +741,20 @@ function Adicionar({ onAdicionar, onEditar, onCancelarEdicao, transacaoInicial }
 
       <label style={{ color: '#94A3B8', fontSize: 13 }}>Data</label>
       <input style={inputStyle} type="date" value={data} onChange={(e) => setData(e.target.value)} />
+
+      {tipo === 'despesa' && categoria === 'filhos' && filhos && filhos.length > 0 && (
+        <>
+          <label style={{ color: '#94A3B8', fontSize: 13 }}>Qual filho?</label>
+          <select style={inputStyle} value={filhoId} onChange={(e) => setFilhoId(e.target.value)}>
+            <option value="">Não especificar</option>
+            {filhos.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.icone} {f.nome}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
 
       {tipo === 'despesa' && (
         <label
@@ -2344,6 +2422,358 @@ function Relatorios({ transacoes, onVoltar }) {
   )
 }
 
+// ---------- Componente: Formulário Novo Filho ----------
+
+function FormNovoFilho({ onSalvar, onCancelar, filhoInicial }) {
+  const [nome, setNome] = useState(filhoInicial?.nome || '')
+  const [icone, setIcone] = useState(filhoInicial?.icone || '🧒')
+
+  const emEdicao = Boolean(filhoInicial)
+  const iconesDisponiveis = ['🧒', '👦', '👧', '👶']
+
+  const inputStyle = {
+    width: '100%',
+    padding: '12px 14px',
+    borderRadius: 10,
+    border: '1px solid #334155',
+    background: '#0F172A',
+    color: '#fff',
+    fontSize: 15,
+    marginBottom: 14,
+    boxSizing: 'border-box',
+  }
+
+  function handleSalvar() {
+    if (!nome.trim()) {
+      alert('Preencha o nome.')
+      return
+    }
+    onSalvar({
+      id: emEdicao ? filhoInicial.id : Date.now(),
+      nome: nome.trim(),
+      icone,
+    })
+  }
+
+  return (
+    <div style={{ background: '#1E293B', borderRadius: 14, padding: 16, marginBottom: 16 }}>
+      <p style={{ color: '#fff', fontSize: 15, fontWeight: 600, marginBottom: 12 }}>
+        {emEdicao ? 'Editar filho(a)' : 'Novo filho(a)'}
+      </p>
+
+      <label style={{ color: '#94A3B8', fontSize: 13 }}>Ícone</label>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        {iconesDisponiveis.map((ic) => (
+          <button
+            key={ic}
+            onClick={() => setIcone(ic)}
+            style={{
+              fontSize: 18,
+              padding: 8,
+              borderRadius: 8,
+              border: icone === ic ? '2px solid #6366F1' : '2px solid transparent',
+              background: '#0F172A',
+            }}
+          >
+            {ic}
+          </button>
+        ))}
+      </div>
+
+      <label style={{ color: '#94A3B8', fontSize: 13 }}>Nome</label>
+      <input style={inputStyle} placeholder="Ex: Sofia" value={nome} onChange={(e) => setNome(e.target.value)} />
+
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button
+          onClick={onCancelar}
+          style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#334155', color: '#fff', fontWeight: 600 }}
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={handleSalvar}
+          style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
+        >
+          {emEdicao ? 'Salvar alterações' : 'Salvar'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ---------- Componente: Filhos ----------
+
+function Filhos({ filhos, transacoes, onAdicionarFilho, onEditarFilho, onExcluirFilho, onVoltar }) {
+  const [modoForm, setModoForm] = useState(null) // null | 'novo' | filhoObjeto
+  const [filhoExpandido, setFilhoExpandido] = useState(null)
+
+  return (
+    <div style={{ padding: 20 }}>
+      <button
+        onClick={onVoltar}
+        style={{ background: 'transparent', border: 'none', color: '#94A3B8', fontSize: 14, marginBottom: 12, padding: 0 }}
+      >
+        ‹ Voltar
+      </button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <h1 style={{ fontSize: 20, color: '#fff' }}>Filhos</h1>
+        {!modoForm && (
+          <button
+            onClick={() => setModoForm('novo')}
+            style={{ background: '#6366F1', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600 }}
+          >
+            + Filho(a)
+          </button>
+        )}
+      </div>
+
+      {modoForm === 'novo' && (
+        <FormNovoFilho
+          onSalvar={(filho) => {
+            onAdicionarFilho(filho)
+            setModoForm(null)
+          }}
+          onCancelar={() => setModoForm(null)}
+        />
+      )}
+      {modoForm && modoForm !== 'novo' && (
+        <FormNovoFilho
+          filhoInicial={modoForm}
+          onSalvar={(filho) => {
+            onEditarFilho(filho)
+            setModoForm(null)
+          }}
+          onCancelar={() => setModoForm(null)}
+        />
+      )}
+
+      {filhos.length === 0 && !modoForm && (
+        <p style={{ color: '#64748B', fontSize: 14 }}>
+          Nenhum filho cadastrado ainda. Cadastre pra começar a acompanhar gastos específicos, como escola, remédios e fraldas.
+        </p>
+      )}
+
+      {filhos.map((filho) => {
+        const gastosDoFilho = transacoes.filter((t) => t.filhoId === filho.id && t.tipo === 'despesa')
+        const totalGasto = gastosDoFilho.reduce((s, t) => s + t.valor, 0)
+        const chaveMesAtual = mesAtual()
+        const totalMesAtual = gastosDoFilho
+          .filter((t) => t.data.startsWith(chaveMesAtual))
+          .reduce((s, t) => s + t.valor, 0)
+        const expandido = filhoExpandido === filho.id
+
+        return (
+          <div key={filho.id} style={{ marginBottom: 12 }}>
+            <div style={{ background: '#1E293B', borderRadius: 14, padding: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <button
+                  onClick={() => setFilhoExpandido(expandido ? null : filho.id)}
+                  style={{ background: 'transparent', border: 'none', display: 'flex', alignItems: 'center', gap: 8 }}
+                >
+                  <span style={{ fontSize: 20 }}>{filho.icone}</span>
+                  <p style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>{filho.nome}</p>
+                </button>
+                <div style={{ display: 'flex', gap: 2 }}>
+                  <button
+                    onClick={() => setModoForm(filho)}
+                    aria-label="Editar filho"
+                    style={{ background: 'transparent', border: 'none', fontSize: 14, padding: 6, cursor: 'pointer' }}
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (window.confirm(`Excluir o perfil de "${filho.nome}"? As transações já lançadas não serão apagadas.`)) {
+                        onExcluirFilho(filho.id)
+                      }
+                    }}
+                    aria-label="Excluir filho"
+                    style={{ background: 'transparent', border: 'none', fontSize: 14, padding: 6, cursor: 'pointer' }}
+                  >
+                    🗑️
+                  </button>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <p style={{ color: '#94A3B8', fontSize: 11 }}>Este mês</p>
+                  <p style={{ color: '#F59E0B', fontSize: 15, fontWeight: 600 }}>{formatarMoeda(totalMesAtual)}</p>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ color: '#94A3B8', fontSize: 11 }}>Total gasto</p>
+                  <p style={{ color: '#F59E0B', fontSize: 15, fontWeight: 600 }}>{formatarMoeda(totalGasto)}</p>
+                </div>
+              </div>
+
+              {expandido && (
+                <div style={{ marginTop: 12, borderTop: '1px solid #334155', paddingTop: 12 }}>
+                  {gastosDoFilho.length === 0 && (
+                    <p style={{ color: '#64748B', fontSize: 13 }}>Nenhum gasto registrado ainda.</p>
+                  )}
+                  {[...gastosDoFilho]
+                    .sort((a, b) => new Date(b.data) - new Date(a.data))
+                    .slice(0, 10)
+                    .map((t) => (
+                      <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
+                        <p style={{ color: '#fff', fontSize: 13 }}>{t.descricao}</p>
+                        <p style={{ color: '#EF4444', fontSize: 13 }}>{formatarMoeda(t.valor)}</p>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ---------- Componente: Assistente IA ----------
+
+function Assistente({ transacoes, metas, reserva, cartoes, onVoltar }) {
+  const [pergunta, setPergunta] = useState('')
+  const [historico, setHistorico] = useState([])
+  const [carregando, setCarregando] = useState(false)
+  const [erro, setErro] = useState(null)
+
+  const perguntasSugeridas = [
+    'Posso gastar R$100 com lazer essa semana?',
+    'Onde estou gastando mais esse mês?',
+    'Quanto preciso guardar por mês pra bater minhas metas?',
+  ]
+
+  async function enviarPergunta(texto) {
+    const perguntaFinal = (texto ?? pergunta).trim()
+    if (!perguntaFinal) return
+
+    setCarregando(true)
+    setErro(null)
+
+    try {
+      const contexto = construirContextoIA(transacoes, metas, reserva, cartoes)
+      const resposta = await fetch('/api/assistente', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pergunta: perguntaFinal, contexto }),
+      })
+      const dados = await resposta.json()
+
+      if (!resposta.ok || dados.erro) {
+        setErro(dados.erro || 'Não consegui falar com a IA agora. Tente de novo.')
+      } else {
+        setHistorico((atual) => [...atual, { pergunta: perguntaFinal, resposta: dados.resposta }])
+        setPergunta('')
+      }
+    } catch {
+      setErro('Não consegui conectar com a IA. Verifique sua internet e tente de novo.')
+    } finally {
+      setCarregando(false)
+    }
+  }
+
+  return (
+    <div style={{ padding: 20, display: 'flex', flexDirection: 'column', minHeight: '100vh', boxSizing: 'border-box' }}>
+      <button
+        onClick={onVoltar}
+        style={{ background: 'transparent', border: 'none', color: '#94A3B8', fontSize: 14, marginBottom: 12, padding: 0 }}
+      >
+        ‹ Voltar
+      </button>
+      <h1 style={{ fontSize: 20, color: '#fff', marginBottom: 16 }}>🤖 Assistente</h1>
+
+      {historico.length === 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <p style={{ color: '#64748B', fontSize: 13, marginBottom: 10 }}>Perguntas rápidas:</p>
+          {perguntasSugeridas.map((p) => (
+            <button
+              key={p}
+              onClick={() => enviarPergunta(p)}
+              style={{
+                display: 'block',
+                width: '100%',
+                textAlign: 'left',
+                background: '#1E293B',
+                border: 'none',
+                color: '#fff',
+                borderRadius: 10,
+                padding: 12,
+                fontSize: 13,
+                marginBottom: 8,
+              }}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div style={{ flex: 1, marginBottom: 16 }}>
+        {historico.map((item, i) => (
+          <div key={i} style={{ marginBottom: 16 }}>
+            <div
+              style={{
+                background: '#6366F1',
+                borderRadius: '14px 14px 4px 14px',
+                padding: '10px 14px',
+                marginBottom: 8,
+                marginLeft: 40,
+              }}
+            >
+              <p style={{ color: '#fff', fontSize: 14 }}>{item.pergunta}</p>
+            </div>
+            <div
+              style={{
+                background: '#1E293B',
+                borderRadius: '14px 14px 14px 4px',
+                padding: '10px 14px',
+                marginRight: 20,
+              }}
+            >
+              <p style={{ color: '#fff', fontSize: 14 }}>{item.resposta}</p>
+            </div>
+          </div>
+        ))}
+        {carregando && <p style={{ color: '#64748B', fontSize: 13 }}>Pensando...</p>}
+        {erro && <p style={{ color: '#EF4444', fontSize: 13 }}>{erro}</p>}
+      </div>
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input
+          value={pergunta}
+          onChange={(e) => setPergunta(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && enviarPergunta()}
+          placeholder="Pergunte algo sobre suas finanças..."
+          style={{
+            flex: 1,
+            padding: '12px 14px',
+            borderRadius: 10,
+            border: '1px solid #334155',
+            background: '#1E293B',
+            color: '#fff',
+            fontSize: 14,
+          }}
+        />
+        <button
+          onClick={() => enviarPergunta()}
+          disabled={carregando}
+          style={{
+            background: '#6366F1',
+            border: 'none',
+            color: '#fff',
+            borderRadius: 10,
+            padding: '0 18px',
+            fontWeight: 700,
+            opacity: carregando ? 0.6 : 1,
+          }}
+        >
+          ➤
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ---------- Componente: Navegação inferior ----------
 
 function BottomNav({ abaAtiva, onMudarAba }) {
@@ -2398,6 +2828,7 @@ export default function App() {
   const [reserva, setReserva] = useState(carregarReserva)
   const [planejamentos, setPlanejamentos] = useState(carregarPlanejamentos)
   const [itensAnuais, setItensAnuais] = useState(carregarItensAnuais)
+  const [filhos, setFilhos] = useState(carregarFilhos)
   const [abaAtiva, setAbaAtiva] = useState('dashboard')
   const [transacaoEditando, setTransacaoEditando] = useState(null)
 
@@ -2428,6 +2859,10 @@ export default function App() {
   useEffect(() => {
     salvarItensAnuais(itensAnuais)
   }, [itensAnuais])
+
+  useEffect(() => {
+    salvarFilhos(filhos)
+  }, [filhos])
 
   function handleMudarAba(novaAba) {
     setTransacaoEditando(null)
@@ -2525,6 +2960,18 @@ export default function App() {
     setItensAnuais((atual) => atual.filter((i) => i.id !== id))
   }
 
+  function handleAdicionarFilho(novoFilho) {
+    setFilhos((atual) => [...atual, novoFilho])
+  }
+
+  function handleEditarFilho(filhoAtualizado) {
+    setFilhos((atual) => atual.map((f) => (f.id === filhoAtualizado.id ? filhoAtualizado : f)))
+  }
+
+  function handleExcluirFilho(id) {
+    setFilhos((atual) => atual.filter((f) => f.id !== id))
+  }
+
   return (
     <div
       style={{
@@ -2541,10 +2988,31 @@ export default function App() {
           onExcluir={handleExcluir}
           onAbrirPlanejamento={() => setAbaAtiva('planejamento')}
           onAbrirRelatorios={() => setAbaAtiva('relatorios')}
+          onAbrirFilhos={() => setAbaAtiva('filhos')}
+          onAbrirAssistente={() => setAbaAtiva('assistente')}
         />
       )}
       {abaAtiva === 'relatorios' && (
         <Relatorios transacoes={transacoes} onVoltar={() => setAbaAtiva('dashboard')} />
+      )}
+      {abaAtiva === 'filhos' && (
+        <Filhos
+          filhos={filhos}
+          transacoes={transacoes}
+          onAdicionarFilho={handleAdicionarFilho}
+          onEditarFilho={handleEditarFilho}
+          onExcluirFilho={handleExcluirFilho}
+          onVoltar={() => setAbaAtiva('dashboard')}
+        />
+      )}
+      {abaAtiva === 'assistente' && (
+        <Assistente
+          transacoes={transacoes}
+          metas={metas}
+          reserva={reserva}
+          cartoes={cartoes}
+          onVoltar={() => setAbaAtiva('dashboard')}
+        />
       )}
       {abaAtiva === 'planejamento' && (
         <Planejamento
@@ -2593,6 +3061,7 @@ export default function App() {
             setAbaAtiva('dashboard')
           }}
           transacaoInicial={transacaoEditando}
+          filhos={filhos}
         />
       )}
 
