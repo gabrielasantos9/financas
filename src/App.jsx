@@ -47,6 +47,30 @@ function formatarDataCurta(dataStr) {
   return `${dia}/${mes}`
 }
 
+// Cores de gradiente por banco (reconhece o nome digitado no cadastro do cartão)
+function corDoBanco(banco) {
+  const nome = (banco || '').trim().toLowerCase()
+  const mapa = {
+    nubank: ['#8A05BE', '#A020D0'],
+    inter: ['#FF7A00', '#FFA940'],
+    itau: ['#EC7000', '#FF9900'],
+    'itaú': ['#EC7000', '#FF9900'],
+    bradesco: ['#CC092F', '#E4002B'],
+    santander: ['#EC0000', '#FF3333'],
+    caixa: ['#0066B3', '#0086D6'],
+    'banco do brasil': ['#F8D117', '#FBE84D'],
+    bb: ['#F8D117', '#FBE84D'],
+    c6: ['#1A1A1A', '#3D3D3D'],
+    picpay: ['#21C25E', '#00A868'],
+    next: ['#00FF5F', '#00CC4C'],
+    original: ['#1DB67B', '#00A15D'],
+    will: ['#FF5A00', '#FF8800'],
+    xp: ['#000000', '#333333'],
+    neon: ['#00E3A5', '#00BD8A'],
+  }
+  return mapa[nome] || ['#4F46E5', '#6366F1']
+}
+
 // ---------- Persistência (localStorage) ----------
 
 function carregarTransacoes() {
@@ -201,6 +225,40 @@ function carregarMetas() {
 
 function salvarMetas(metas) {
   localStorage.setItem('metas', JSON.stringify(metas))
+}
+
+// ---------- Persistência: Reserva de emergência ----------
+
+function carregarReserva() {
+  try {
+    const dados = localStorage.getItem('reserva')
+    return dados ? JSON.parse(dados) : null
+  } catch {
+    return null
+  }
+}
+
+function salvarReserva(reserva) {
+  if (reserva === null) {
+    localStorage.removeItem('reserva')
+  } else {
+    localStorage.setItem('reserva', JSON.stringify(reserva))
+  }
+}
+
+// Média de despesas dos últimos meses com dados (até 3 meses), usada pra sugerir a meta da reserva
+function calcularMediaDespesasMensais(transacoes) {
+  const despesas = transacoes.filter((t) => t.tipo === 'despesa')
+  const porMes = {}
+  despesas.forEach((t) => {
+    const chave = t.data.slice(0, 7)
+    porMes[chave] = (porMes[chave] || 0) + t.valor
+  })
+  const chaves = Object.keys(porMes).sort()
+  const ultimasChaves = chaves.slice(-3)
+  if (ultimasChaves.length === 0) return 0
+  const soma = ultimasChaves.reduce((s, k) => s + porMes[k], 0)
+  return soma / ultimasChaves.length
 }
 
 // ---------- Componente: Dashboard ----------
@@ -1093,7 +1151,7 @@ function Cartoes({ cartoes, compras, onAdicionarCartao, onEditarCartao, onExclui
           <div key={cartao.id} style={{ marginBottom: 16 }}>
             <div
               style={{
-                background: 'linear-gradient(135deg, #4F46E5, #6366F1)',
+                background: `linear-gradient(135deg, ${corDoBanco(cartao.banco)[0]}, ${corDoBanco(cartao.banco)[1]})`,
                 borderRadius: 16,
                 padding: 18,
               }}
@@ -1347,7 +1405,7 @@ function FormNovaMeta({ onSalvar, onCancelar, metaInicial }) {
 
 // ---------- Componente: Metas ----------
 
-function Metas({ metas, onAdicionarMeta, onEditarMeta, onExcluirMeta, onContribuir }) {
+function Metas({ metas, onAdicionarMeta, onEditarMeta, onExcluirMeta, onContribuir, reserva, transacoes, onSalvarConfigReserva, onContribuirReserva }) {
   const [modoForm, setModoForm] = useState(null) // null | 'novo' | metaObjeto
   const [depositoAberto, setDepositoAberto] = useState(null) // id da meta com input de depósito aberto
   const [valorDeposito, setValorDeposito] = useState('')
@@ -1376,6 +1434,13 @@ function Metas({ metas, onAdicionarMeta, onEditarMeta, onExcluirMeta, onContribu
           </button>
         )}
       </div>
+
+      <ReservaEmergencia
+        reserva={reserva}
+        transacoes={transacoes}
+        onSalvarConfig={onSalvarConfigReserva}
+        onContribuir={onContribuirReserva}
+      />
 
       {modoForm === 'novo' && (
         <FormNovaMeta
@@ -1519,6 +1584,248 @@ function Metas({ metas, onAdicionarMeta, onEditarMeta, onExcluirMeta, onContribu
   )
 }
 
+// ---------- Componente: Formulário Reserva de Emergência ----------
+
+function FormReserva({ onSalvar, onCancelar, reservaInicial, despesaMediaMensal }) {
+  const [valorAtual, setValorAtual] = useState(reservaInicial ? String(reservaInicial.valorAtual) : '0')
+  const [mesesDesejados, setMesesDesejados] = useState(reservaInicial ? String(reservaInicial.mesesDesejados) : '6')
+  const [aporteMensalPlanejado, setAporteMensalPlanejado] = useState(
+    reservaInicial ? String(reservaInicial.aporteMensalPlanejado) : ''
+  )
+
+  const inputStyle = {
+    width: '100%',
+    padding: '12px 14px',
+    borderRadius: 10,
+    border: '1px solid #334155',
+    background: '#0F172A',
+    color: '#fff',
+    fontSize: 15,
+    marginBottom: 14,
+    boxSizing: 'border-box',
+  }
+
+  function handleSalvar() {
+    if (!mesesDesejados || Number(mesesDesejados) <= 0) {
+      alert('Diga quantos meses de despesas você quer ter guardado.')
+      return
+    }
+    onSalvar({
+      valorAtual: Number(valorAtual) || 0,
+      mesesDesejados: Number(mesesDesejados),
+      aporteMensalPlanejado: Number(aporteMensalPlanejado) || 0,
+    })
+  }
+
+  return (
+    <div style={{ background: '#1E293B', borderRadius: 14, padding: 16, marginBottom: 16 }}>
+      <p style={{ color: '#fff', fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
+        🛡️ Configurar reserva de emergência
+      </p>
+      <p style={{ color: '#64748B', fontSize: 12, marginBottom: 12 }}>
+        Sua média de despesas nos últimos meses é {formatarMoeda(despesaMediaMensal)}.
+      </p>
+
+      <label style={{ color: '#94A3B8', fontSize: 13 }}>Quantos meses de despesas você quer guardar?</label>
+      <input
+        style={inputStyle}
+        type="number"
+        inputMode="numeric"
+        placeholder="Ex: 6"
+        value={mesesDesejados}
+        onChange={(e) => setMesesDesejados(e.target.value)}
+      />
+
+      <label style={{ color: '#94A3B8', fontSize: 13 }}>Já guardado até agora (R$)</label>
+      <input
+        style={inputStyle}
+        type="number"
+        inputMode="decimal"
+        placeholder="0,00"
+        value={valorAtual}
+        onChange={(e) => setValorAtual(e.target.value)}
+      />
+
+      <label style={{ color: '#94A3B8', fontSize: 13 }}>Quanto pretende guardar por mês? (opcional)</label>
+      <input
+        style={inputStyle}
+        type="number"
+        inputMode="decimal"
+        placeholder="0,00"
+        value={aporteMensalPlanejado}
+        onChange={(e) => setAporteMensalPlanejado(e.target.value)}
+      />
+
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button
+          onClick={onCancelar}
+          style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#334155', color: '#fff', fontWeight: 600 }}
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={handleSalvar}
+          style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
+        >
+          Salvar
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ---------- Componente: Reserva de Emergência ----------
+
+function ReservaEmergencia({ reserva, transacoes, onSalvarConfig, onContribuir }) {
+  const [editando, setEditando] = useState(false)
+  const [depositoAberto, setDepositoAberto] = useState(false)
+  const [valorDeposito, setValorDeposito] = useState('')
+
+  const despesaMediaMensal = calcularMediaDespesasMensais(transacoes)
+
+  if (!reserva || editando) {
+    return (
+      <div style={{ marginBottom: 20 }}>
+        <FormReserva
+          reservaInicial={reserva}
+          despesaMediaMensal={despesaMediaMensal}
+          onSalvar={(config) => {
+            onSalvarConfig(config)
+            setEditando(false)
+          }}
+          onCancelar={() => setEditando(false)}
+        />
+      </div>
+    )
+  }
+
+  const valorAlvo = despesaMediaMensal * reserva.mesesDesejados
+  const percentual = valorAlvo > 0 ? Math.min((reserva.valorAtual / valorAlvo) * 100, 100) : 0
+  const completa = reserva.valorAtual >= valorAlvo
+  const faltam = Math.max(valorAlvo - reserva.valorAtual, 0)
+  const tempoEstimadoMeses =
+    reserva.aporteMensalPlanejado > 0 ? Math.ceil(faltam / reserva.aporteMensalPlanejado) : null
+
+  function confirmarDeposito() {
+    const valor = Number(valorDeposito)
+    if (!valor || valor <= 0) {
+      alert('Digite um valor válido pra depositar.')
+      return
+    }
+    onContribuir(valor)
+    setDepositoAberto(false)
+    setValorDeposito('')
+  }
+
+  return (
+    <div
+      style={{
+        background: 'linear-gradient(135deg, #0F766E, #0D9488)',
+        borderRadius: 16,
+        padding: 18,
+        marginBottom: 20,
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <p style={{ color: '#fff', fontSize: 15, fontWeight: 700 }}>
+          🛡️ Reserva de emergência {completa && '✅'}
+        </p>
+        <button
+          onClick={() => setEditando(true)}
+          aria-label="Configurar reserva"
+          style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: 6, padding: '4px 8px', fontSize: 13 }}
+        >
+          ⚙️
+        </button>
+      </div>
+
+      <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 8, height: 10, marginBottom: 8 }}>
+        <div
+          style={{
+            width: `${percentual}%`,
+            background: completa ? '#22C55E' : '#fff',
+            height: 10,
+            borderRadius: 8,
+          }}
+        />
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+        <p style={{ color: '#CCFBF1', fontSize: 12 }}>
+          {formatarMoeda(reserva.valorAtual)} de {formatarMoeda(valorAlvo)}
+        </p>
+        <p style={{ color: '#CCFBF1', fontSize: 12 }}>{Math.round(percentual)}%</p>
+      </div>
+
+      <p style={{ color: '#CCFBF1', fontSize: 12, marginBottom: 4 }}>
+        Meta: {reserva.mesesDesejados} meses de despesas ({formatarMoeda(despesaMediaMensal)}/mês)
+      </p>
+
+      {!completa && (
+        <p style={{ color: '#CCFBF1', fontSize: 12, marginBottom: 10 }}>
+          Faltam {formatarMoeda(faltam)}
+          {tempoEstimadoMeses !== null &&
+            ` · no ritmo atual, ~${tempoEstimadoMeses} ${tempoEstimadoMeses === 1 ? 'mês' : 'meses'}`}
+        </p>
+      )}
+
+      {depositoAberto ? (
+        <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+          <input
+            autoFocus
+            type="number"
+            inputMode="decimal"
+            placeholder="Valor a depositar"
+            value={valorDeposito}
+            onChange={(e) => setValorDeposito(e.target.value)}
+            style={{
+              flex: 1,
+              padding: '10px 12px',
+              borderRadius: 10,
+              border: 'none',
+              background: 'rgba(255,255,255,0.15)',
+              color: '#fff',
+              fontSize: 14,
+            }}
+          />
+          <button
+            onClick={confirmarDeposito}
+            style={{ background: '#fff', border: 'none', color: '#0D9488', borderRadius: 10, padding: '0 16px', fontWeight: 700 }}
+          >
+            OK
+          </button>
+          <button
+            onClick={() => {
+              setDepositoAberto(false)
+              setValorDeposito('')
+            }}
+            style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: 10, padding: '0 12px' }}
+          >
+            ✕
+          </button>
+        </div>
+      ) : (
+        !completa && (
+          <button
+            onClick={() => setDepositoAberto(true)}
+            style={{
+              width: '100%',
+              padding: 10,
+              borderRadius: 10,
+              border: '1px dashed rgba(255,255,255,0.5)',
+              background: 'transparent',
+              color: '#fff',
+              fontWeight: 600,
+            }}
+          >
+            💰 Depositar
+          </button>
+        )
+      )}
+    </div>
+  )
+}
+
 // ---------- Componente: Navegação inferior ----------
 
 function BottomNav({ abaAtiva, onMudarAba }) {
@@ -1570,6 +1877,7 @@ export default function App() {
   const [cartoes, setCartoes] = useState(carregarCartoes)
   const [compras, setCompras] = useState(carregarCompras)
   const [metas, setMetas] = useState(carregarMetas)
+  const [reserva, setReserva] = useState(carregarReserva)
   const [abaAtiva, setAbaAtiva] = useState('dashboard')
   const [transacaoEditando, setTransacaoEditando] = useState(null)
 
@@ -1588,6 +1896,10 @@ export default function App() {
   useEffect(() => {
     salvarMetas(metas)
   }, [metas])
+
+  useEffect(() => {
+    salvarReserva(reserva)
+  }, [reserva])
 
   function handleMudarAba(novaAba) {
     setTransacaoEditando(null)
@@ -1661,6 +1973,14 @@ export default function App() {
     )
   }
 
+  function handleSalvarConfigReserva(config) {
+    setReserva(config)
+  }
+
+  function handleContribuirReserva(valor) {
+    setReserva((atual) => (atual ? { ...atual, valorAtual: atual.valorAtual + valor } : atual))
+  }
+
   return (
     <div
       style={{
@@ -1693,6 +2013,10 @@ export default function App() {
           onEditarMeta={handleEditarMeta}
           onExcluirMeta={handleExcluirMeta}
           onContribuir={handleContribuirMeta}
+          reserva={reserva}
+          transacoes={transacoes}
+          onSalvarConfigReserva={handleSalvarConfigReserva}
+          onContribuirReserva={handleContribuirReserva}
         />
       )}
       {abaAtiva === 'adicionar' && (
