@@ -402,9 +402,39 @@ async function gerarHashPin(pin) {
     .join('')
 }
 
+// ---------- Persistência: Perfil do usuário (onboarding) ----------
+
+function carregarPerfil() {
+  try {
+    const dados = localStorage.getItem('perfilUsuario')
+    return dados ? JSON.parse(dados) : null
+  } catch {
+    return null
+  }
+}
+
+function salvarPerfil(perfil) {
+  localStorage.setItem('perfilUsuario', JSON.stringify(perfil))
+}
+
+// ---------- Persistência: Preferências (notificações, limite de gastos) ----------
+
+function carregarPreferencias() {
+  try {
+    const dados = localStorage.getItem('preferencias')
+    return dados ? JSON.parse(dados) : { notificarVencimentos: true, limiteGastosMensal: 0 }
+  } catch {
+    return { notificarVencimentos: true, limiteGastosMensal: 0 }
+  }
+}
+
+function salvarPreferencias(preferencias) {
+  localStorage.setItem('preferencias', JSON.stringify(preferencias))
+}
+
 // ---------- Componente: Dashboard ----------
 
-function Dashboard({ transacoes, onEditar, onExcluir, onAbrirPlanejamento, onAbrirRelatorios, onAbrirFilhos, onAbrirAssistente, onAbrirConfiguracoes }) {
+function Dashboard({ transacoes, onEditar, onExcluir, nome, limiteGastosMensal }) {
   const hojeStr = new Date().toISOString().slice(0, 10)
   const doMes = transacoes.filter((t) => t.data.startsWith(mesAtual()))
 
@@ -436,47 +466,26 @@ function Dashboard({ transacoes, onEditar, onExcluir, onAbrirPlanejamento, onAbr
     })
   const categoriasOrdenadas = Object.entries(porCategoria).sort((a, b) => b[1] - a[1])
 
+  const passouDoLimite = limiteGastosMensal > 0 && despesasMes > limiteGastosMensal
+
   return (
-    <div style={{ padding: 20 }}>
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 20, color: '#fff', marginBottom: 10 }}>Olá! 👋</h1>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-          <button
-            onClick={onAbrirPlanejamento}
-            style={{ flex: 1, background: '#1E293B', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 10px', fontSize: 12 }}
-          >
-            📋 Planejamento
-          </button>
-          <button
-            onClick={onAbrirRelatorios}
-            style={{ flex: 1, background: '#1E293B', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 10px', fontSize: 12 }}
-          >
-            📊 Relatórios
-          </button>
+    <div style={{ padding: 20, paddingTop: 4 }}>
+      {passouDoLimite && (
+        <div
+          style={{
+            background: '#7F1D1D',
+            border: '1px solid #EF4444',
+            borderRadius: 12,
+            padding: 12,
+            marginBottom: 16,
+          }}
+        >
+          <p style={{ color: '#fff', fontSize: 13 }}>
+            ⚠️ Você já passou do seu limite de {formatarMoeda(limiteGastosMensal)} pra esse mês.
+          </p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            onClick={onAbrirFilhos}
-            style={{ flex: 1, background: '#1E293B', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 10px', fontSize: 12 }}
-          >
-            👶 Filhos
-          </button>
-          <button
-            onClick={onAbrirAssistente}
-            style={{ flex: 1, background: '#1E293B', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 10px', fontSize: 12 }}
-          >
-            🤖 Assistente IA
-          </button>
-        </div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-          <button
-            onClick={onAbrirConfiguracoes}
-            style={{ flex: 1, background: '#1E293B', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 10px', fontSize: 12 }}
-          >
-            ⚙️ Segurança
-          </button>
-        </div>
-      </div>
+      )}
+
 
       <div
         style={{
@@ -2324,15 +2333,7 @@ function Relatorios({ transacoes, onVoltar }) {
   }
 
   return (
-    <div style={{ padding: 20 }}>
-      <button
-        onClick={onVoltar}
-        style={{ background: 'transparent', border: 'none', color: '#94A3B8', fontSize: 14, marginBottom: 12, padding: 0 }}
-      >
-        ‹ Voltar
-      </button>
-      <h1 style={{ fontSize: 20, color: '#fff', marginBottom: 20 }}>Relatórios</h1>
-
+    <div style={{ padding: '4px 20px 20px' }}>
       <div
         style={{
           background: economiaMedia >= 0 ? '#1E293B' : '#1E293B',
@@ -2813,7 +2814,7 @@ function Assistente({ transacoes, metas, reserva, cartoes, onVoltar }) {
 
 // ---------- Componente: Tela de Bloqueio ----------
 
-function TelaBloqueio({ segurancaConfig, onDesbloquear }) {
+function TelaBloqueio({ segurancaConfig, frase, onDesbloquear }) {
   const [pin, setPin] = useState('')
   const [erro, setErro] = useState(false)
 
@@ -2850,7 +2851,12 @@ function TelaBloqueio({ segurancaConfig, onDesbloquear }) {
       }}
     >
       <p style={{ fontSize: 32, marginBottom: 12 }}>💰</p>
-      <p style={{ color: '#fff', fontSize: 16, marginBottom: 20 }}>Digite seu PIN</p>
+      <p style={{ color: '#fff', fontSize: 16, marginBottom: 8 }}>Digite seu PIN</p>
+      {frase && (
+        <p style={{ color: '#6366F1', fontSize: 13, marginBottom: 20, fontStyle: 'italic', textAlign: 'center', maxWidth: 260 }}>
+          "{frase}"
+        </p>
+      )}
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 30 }}>
         {[0, 1, 2, 3].map((i) => (
@@ -2894,14 +2900,20 @@ function TelaBloqueio({ segurancaConfig, onDesbloquear }) {
   )
 }
 
-// ---------- Componente: Configurações (Segurança) ----------
+// ---------- Componente: Configurações ----------
 
-function Configuracoes({ segurancaConfig, onSalvarSeguranca, onRemoverSeguranca, onVoltar }) {
+function Configuracoes({ segurancaConfig, onSalvarSeguranca, onRemoverSeguranca, preferencias, onSalvarPreferencias, onVoltar }) {
+  const [senhaAberta, setSenhaAberta] = useState(false)
   const [etapa, setEtapa] = useState(segurancaConfig ? 'ativo' : 'inativo') // inativo | definirNovo | ativo | remover
   const [novoPin, setNovoPin] = useState('')
   const [confirmarPin, setConfirmarPin] = useState('')
   const [pinAtualParaRemover, setPinAtualParaRemover] = useState('')
   const [mensagem, setMensagem] = useState('')
+
+  const [notificarVencimentos, setNotificarVencimentos] = useState(preferencias?.notificarVencimentos ?? true)
+  const [limiteGastosMensal, setLimiteGastosMensal] = useState(
+    preferencias?.limiteGastosMensal ? String(preferencias.limiteGastosMensal) : ''
+  )
 
   const inputStyle = {
     width: '100%',
@@ -2945,6 +2957,15 @@ function Configuracoes({ segurancaConfig, onSalvarSeguranca, onRemoverSeguranca,
     setMensagem('')
   }
 
+  function handleSalvarNotificacoes(valor) {
+    setNotificarVencimentos(valor)
+    onSalvarPreferencias({ notificarVencimentos: valor, limiteGastosMensal: Number(limiteGastosMensal) || 0 })
+  }
+
+  function handleSalvarLimite() {
+    onSalvarPreferencias({ notificarVencimentos, limiteGastosMensal: Number(limiteGastosMensal) || 0 })
+  }
+
   return (
     <div style={{ padding: 20 }}>
       <button
@@ -2953,98 +2974,152 @@ function Configuracoes({ segurancaConfig, onSalvarSeguranca, onRemoverSeguranca,
       >
         ‹ Voltar
       </button>
-      <h1 style={{ fontSize: 20, color: '#fff', marginBottom: 20 }}>⚙️ Segurança</h1>
+      <h1 style={{ fontSize: 20, color: '#fff', marginBottom: 20 }}>⚙️ Configurações</h1>
 
-      {etapa === 'inativo' && (
-        <div style={{ background: '#1E293B', borderRadius: 14, padding: 16 }}>
-          <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 12 }}>
-            Nenhum PIN configurado. Quem abrir o app no seu celular vê suas finanças direto.
+      <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 8 }}>🔔 Notificações</p>
+      <div style={{ background: '#1E293B', borderRadius: 14, padding: 16, marginBottom: 20 }}>
+        <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ color: '#fff', fontSize: 14 }}>Avisar sobre contas próximas do vencimento</span>
+          <input
+            type="checkbox"
+            checked={notificarVencimentos}
+            onChange={(e) => handleSalvarNotificacoes(e.target.checked)}
+            style={{ width: 20, height: 20 }}
+          />
+        </label>
+        <p style={{ color: '#64748B', fontSize: 11, marginTop: 8 }}>
+          Quando ativado, mostra um aviso na tela inicial se houver contas fixas vencendo nos próximos dias.
+        </p>
+      </div>
+
+      <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 8 }}>💸 Limite de gastos mensal</p>
+      <div style={{ background: '#1E293B', borderRadius: 14, padding: 16, marginBottom: 20 }}>
+        <label style={{ color: '#94A3B8', fontSize: 13 }}>Avisar quando os gastos do mês passarem de (R$)</label>
+        <input
+          style={inputStyle}
+          type="number"
+          inputMode="decimal"
+          placeholder="Ex: 2000 (deixe vazio pra desativar)"
+          value={limiteGastosMensal}
+          onChange={(e) => setLimiteGastosMensal(e.target.value)}
+        />
+        <button
+          onClick={handleSalvarLimite}
+          style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
+        >
+          Salvar limite
+        </button>
+      </div>
+
+      <button
+        onClick={() => setSenhaAberta(!senhaAberta)}
+        style={{
+          width: '100%',
+          textAlign: 'left',
+          background: 'transparent',
+          border: 'none',
+          color: '#64748B',
+          fontSize: 12,
+          padding: '8px 0',
+          marginBottom: senhaAberta ? 8 : 0,
+        }}
+      >
+        {senhaAberta ? '▾' : '▸'} Adicionar senha ao abrir o app {segurancaConfig ? '(ativada)' : ''}
+      </button>
+
+      {senhaAberta && (
+        <>
+          {etapa === 'inativo' && (
+            <div style={{ background: '#1E293B', borderRadius: 14, padding: 16 }}>
+              <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 12 }}>
+                Nenhum PIN configurado. Quem abrir o app no seu celular vê suas finanças direto.
+              </p>
+              <button
+                onClick={() => setEtapa('definirNovo')}
+                style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
+              >
+                Criar PIN de 4 dígitos
+              </button>
+            </div>
+          )}
+
+          {etapa === 'definirNovo' && (
+            <div style={{ background: '#1E293B', borderRadius: 14, padding: 16 }}>
+              <label style={{ color: '#94A3B8', fontSize: 13 }}>Novo PIN (4 números)</label>
+              <input
+                style={inputStyle}
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={novoPin}
+                onChange={(e) => setNovoPin(e.target.value.replace(/\D/g, ''))}
+              />
+              <label style={{ color: '#94A3B8', fontSize: 13 }}>Confirme o PIN</label>
+              <input
+                style={inputStyle}
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={confirmarPin}
+                onChange={(e) => setConfirmarPin(e.target.value.replace(/\D/g, ''))}
+              />
+              {mensagem && <p style={{ color: '#EF4444', fontSize: 13, marginBottom: 12 }}>{mensagem}</p>}
+              <button
+                onClick={handleDefinirPin}
+                style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
+              >
+                Salvar PIN
+              </button>
+            </div>
+          )}
+
+          {etapa === 'ativo' && (
+            <div style={{ background: '#1E293B', borderRadius: 14, padding: 16 }}>
+              <p style={{ color: '#22C55E', fontSize: 13, marginBottom: 12 }}>✅ PIN ativado — o app pede o PIN toda vez que abrir.</p>
+              <button
+                onClick={() => setEtapa('remover')}
+                style={{ width: '100%', padding: 12, borderRadius: 10, border: '1px solid #EF4444', background: 'transparent', color: '#EF4444', fontWeight: 600 }}
+              >
+                Remover PIN
+              </button>
+            </div>
+          )}
+
+          {etapa === 'remover' && (
+            <div style={{ background: '#1E293B', borderRadius: 14, padding: 16 }}>
+              <label style={{ color: '#94A3B8', fontSize: 13 }}>Digite o PIN atual pra confirmar</label>
+              <input
+                style={inputStyle}
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={pinAtualParaRemover}
+                onChange={(e) => setPinAtualParaRemover(e.target.value.replace(/\D/g, ''))}
+              />
+              {mensagem && <p style={{ color: '#EF4444', fontSize: 13, marginBottom: 12 }}>{mensagem}</p>}
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  onClick={() => setEtapa('ativo')}
+                  style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#334155', color: '#fff', fontWeight: 600 }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleRemoverPin}
+                  style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#EF4444', color: '#fff', fontWeight: 700 }}
+                >
+                  Remover
+                </button>
+              </div>
+            </div>
+          )}
+
+          <p style={{ color: '#64748B', fontSize: 12, marginTop: 16 }}>
+            Nota: o PIN protege contra quem pega seu celular casualmente, mas os dados continuam
+            guardados no navegador sem criptografia forte. Biometria fica pra uma fase futura.
           </p>
-          <button
-            onClick={() => setEtapa('definirNovo')}
-            style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
-          >
-            Criar PIN de 4 dígitos
-          </button>
-        </div>
+        </>
       )}
-
-      {etapa === 'definirNovo' && (
-        <div style={{ background: '#1E293B', borderRadius: 14, padding: 16 }}>
-          <label style={{ color: '#94A3B8', fontSize: 13 }}>Novo PIN (4 números)</label>
-          <input
-            style={inputStyle}
-            type="password"
-            inputMode="numeric"
-            maxLength={4}
-            value={novoPin}
-            onChange={(e) => setNovoPin(e.target.value.replace(/\D/g, ''))}
-          />
-          <label style={{ color: '#94A3B8', fontSize: 13 }}>Confirme o PIN</label>
-          <input
-            style={inputStyle}
-            type="password"
-            inputMode="numeric"
-            maxLength={4}
-            value={confirmarPin}
-            onChange={(e) => setConfirmarPin(e.target.value.replace(/\D/g, ''))}
-          />
-          {mensagem && <p style={{ color: '#EF4444', fontSize: 13, marginBottom: 12 }}>{mensagem}</p>}
-          <button
-            onClick={handleDefinirPin}
-            style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
-          >
-            Salvar PIN
-          </button>
-        </div>
-      )}
-
-      {etapa === 'ativo' && (
-        <div style={{ background: '#1E293B', borderRadius: 14, padding: 16 }}>
-          <p style={{ color: '#22C55E', fontSize: 13, marginBottom: 12 }}>✅ PIN ativado — o app pede o PIN toda vez que abrir.</p>
-          <button
-            onClick={() => setEtapa('remover')}
-            style={{ width: '100%', padding: 12, borderRadius: 10, border: '1px solid #EF4444', background: 'transparent', color: '#EF4444', fontWeight: 600 }}
-          >
-            Remover PIN
-          </button>
-        </div>
-      )}
-
-      {etapa === 'remover' && (
-        <div style={{ background: '#1E293B', borderRadius: 14, padding: 16 }}>
-          <label style={{ color: '#94A3B8', fontSize: 13 }}>Digite o PIN atual pra confirmar</label>
-          <input
-            style={inputStyle}
-            type="password"
-            inputMode="numeric"
-            maxLength={4}
-            value={pinAtualParaRemover}
-            onChange={(e) => setPinAtualParaRemover(e.target.value.replace(/\D/g, ''))}
-          />
-          {mensagem && <p style={{ color: '#EF4444', fontSize: 13, marginBottom: 12 }}>{mensagem}</p>}
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button
-              onClick={() => setEtapa('ativo')}
-              style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#334155', color: '#fff', fontWeight: 600 }}
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={handleRemoverPin}
-              style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#EF4444', color: '#fff', fontWeight: 700 }}
-            >
-              Remover
-            </button>
-          </div>
-        </div>
-      )}
-
-      <p style={{ color: '#64748B', fontSize: 12, marginTop: 16 }}>
-        Nota: por enquanto o PIN protege contra quem pega seu celular casualmente, mas os dados
-        continuam guardados no navegador sem criptografia forte. Biometria (digital/rosto) fica pra
-        uma fase futura, quando o app virar um PWA instalável de verdade.
-      </p>
     </div>
   )
 }
@@ -3084,15 +3159,232 @@ function AvisoPrivacidade({ onAceitar }) {
   )
 }
 
+// ---------- Componente: Boas-vindas (onboarding) ----------
+
+function TelaBoasVindas({ onConcluir }) {
+  const [nome, setNome] = useState('')
+  const [frase, setFrase] = useState('')
+
+  const inputStyle = {
+    width: '100%',
+    padding: '14px 16px',
+    borderRadius: 10,
+    border: '1px solid #334155',
+    background: '#1E293B',
+    color: '#fff',
+    fontSize: 16,
+    marginBottom: 16,
+    boxSizing: 'border-box',
+  }
+
+  function handleContinuar() {
+    if (!nome.trim()) {
+      alert('Como você gostaria de ser chamada?')
+      return
+    }
+    onConcluir({
+      nome: nome.trim(),
+      frase: frase.trim() || 'Seu dinheiro, suas regras',
+    })
+  }
+
+  return (
+    <div
+      style={{
+        minHeight: '100vh',
+        background: '#0F172A',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        padding: 28,
+        fontFamily: 'system-ui, sans-serif',
+        boxSizing: 'border-box',
+      }}
+    >
+      <p style={{ fontSize: 40, textAlign: 'center', marginBottom: 8 }}>💰</p>
+      <p style={{ color: '#fff', fontSize: 22, fontWeight: 700, textAlign: 'center', marginBottom: 4 }}>
+        Minhas Finanças
+      </p>
+      <p style={{ color: '#94A3B8', fontSize: 14, textAlign: 'center', marginBottom: 32 }}>
+        Vamos configurar seu app
+      </p>
+
+      <label style={{ color: '#94A3B8', fontSize: 13, marginBottom: 6, display: 'block' }}>
+        Como você gostaria de ser chamada?
+      </label>
+      <input
+        style={inputStyle}
+        placeholder="Seu nome ou apelido"
+        value={nome}
+        onChange={(e) => setNome(e.target.value)}
+      />
+
+      <label style={{ color: '#94A3B8', fontSize: 13, marginBottom: 6, display: 'block' }}>
+        Crie uma frase pessoal (opcional)
+      </label>
+      <input
+        style={inputStyle}
+        placeholder="Ex: Minha reserva, meu orgulho"
+        value={frase}
+        onChange={(e) => setFrase(e.target.value)}
+      />
+      <p style={{ color: '#64748B', fontSize: 12, marginBottom: 24 }}>
+        Essa frase vai aparecer na tela de PIN, se você ativar uma. Serve pra você reconhecer na hora
+        que é realmente o seu app, e não uma tela falsa tentando copiar ele.
+      </p>
+
+      <button
+        onClick={handleContinuar}
+        style={{ width: '100%', padding: 16, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700, fontSize: 16 }}
+      >
+        Começar
+      </button>
+    </div>
+  )
+}
+
+// ---------- Componente: Início (Dashboard + Calendário + Relatórios) ----------
+
+function Inicio({
+  transacoes,
+  onEditar,
+  onExcluir,
+  nome,
+  preferencias,
+  onAbrirFilhos,
+  onAbrirPlanejamento,
+  onAbrirConfiguracoes,
+}) {
+  const [subAba, setSubAba] = useState('geral')
+
+  const chaveMesAtual = mesAtual()
+  const hojeStr = new Date().toISOString().slice(0, 10)
+  const emSeteDias = new Date()
+  emSeteDias.setDate(emSeteDias.getDate() + 7)
+  const emSeteDiasStr = emSeteDias.toISOString().slice(0, 10)
+
+  const vencimentosProximos = itensDoMesComProjecao(
+    transacoes,
+    Number(chaveMesAtual.split('-')[0]),
+    Number(chaveMesAtual.split('-')[1])
+  ).filter((t) => t.tipo === 'despesa' && t.data >= hojeStr && t.data <= emSeteDiasStr)
+
+  const subAbas = [
+    { id: 'geral', label: 'Visão geral' },
+    { id: 'calendario', label: 'Calendário' },
+    { id: 'relatorios', label: 'Relatórios' },
+  ]
+
+  return (
+    <div>
+      <div style={{ padding: '20px 20px 0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <p style={{ color: '#fff', fontSize: 20, fontWeight: 700 }}>Olá, {nome}! 👋</p>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              onClick={onAbrirFilhos}
+              aria-label="Filhos"
+              style={{ background: 'transparent', border: 'none', fontSize: 18, padding: 4 }}
+            >
+              👶
+            </button>
+            <button
+              onClick={onAbrirPlanejamento}
+              aria-label="Planejamento"
+              style={{ background: 'transparent', border: 'none', fontSize: 18, padding: 4 }}
+            >
+              📋
+            </button>
+            <button
+              onClick={onAbrirConfiguracoes}
+              aria-label="Configurações"
+              style={{ background: 'transparent', border: 'none', fontSize: 18, padding: 4 }}
+            >
+              ⚙️
+            </button>
+          </div>
+        </div>
+
+        {preferencias?.notificarVencimentos && vencimentosProximos.length > 0 && (
+          <div style={{ background: '#1E293B', border: '1px solid #F59E0B', borderRadius: 12, padding: 12, marginBottom: 14 }}>
+            <p style={{ color: '#F59E0B', fontSize: 12 }}>
+              🔔 {vencimentosProximos.length === 1 ? '1 conta vence' : `${vencimentosProximos.length} contas vencem`} nos próximos 7 dias
+            </p>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 6, marginBottom: 4, background: '#1E293B', borderRadius: 10, padding: 4 }}>
+          {subAbas.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => setSubAba(s.id)}
+              style={{
+                flex: 1,
+                padding: 8,
+                borderRadius: 8,
+                border: 'none',
+                background: subAba === s.id ? '#6366F1' : 'transparent',
+                color: '#fff',
+                fontSize: 12,
+                fontWeight: 600,
+              }}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {subAba === 'geral' && (
+        <Dashboard
+          transacoes={transacoes}
+          onEditar={onEditar}
+          onExcluir={onExcluir}
+          limiteGastosMensal={preferencias?.limiteGastosMensal || 0}
+        />
+      )}
+      {subAba === 'calendario' && <Calendario transacoes={transacoes} />}
+      {subAba === 'relatorios' && <Relatorios transacoes={transacoes} />}
+    </div>
+  )
+}
+
+// ---------- Componente: Botão Flutuante ----------
+
+function BotaoFlutuante({ icone, onClick, cor, posicaoInferior }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        position: 'fixed',
+        right: 20,
+        bottom: posicaoInferior,
+        width: 56,
+        height: 56,
+        borderRadius: 56,
+        border: 'none',
+        background: cor,
+        color: '#fff',
+        fontSize: 22,
+        boxShadow: '0 4px 14px rgba(0,0,0,0.4)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 900,
+      }}
+    >
+      {icone}
+    </button>
+  )
+}
+
 // ---------- Componente: Navegação inferior ----------
 
 function BottomNav({ abaAtiva, onMudarAba }) {
   const abas = [
     { id: 'dashboard', label: 'Início', icone: '🏠' },
-    { id: 'calendario', label: 'Calendário', icone: '📅' },
     { id: 'cartoes', label: 'Cartões', icone: '💳' },
     { id: 'metas', label: 'Metas', icone: '🎯' },
-    { id: 'adicionar', label: 'Adicionar', icone: '➕' },
   ]
 
   return (
@@ -3140,6 +3432,8 @@ export default function App() {
   const [itensAnuais, setItensAnuais] = useState(carregarItensAnuais)
   const [filhos, setFilhos] = useState(carregarFilhos)
   const [segurancaConfig, setSegurancaConfig] = useState(carregarSeguranca)
+  const [preferencias, setPreferencias] = useState(carregarPreferencias)
+  const [perfil, setPerfil] = useState(carregarPerfil)
   const [desbloqueado, setDesbloqueado] = useState(false)
   const [lgpdAceito, setLgpdAceito] = useState(() => localStorage.getItem('lgpdAceito') === 'true')
   const [abaAtiva, setAbaAtiva] = useState('dashboard')
@@ -3295,8 +3589,28 @@ export default function App() {
     salvarSeguranca(null)
   }
 
+  function handleSalvarPreferencias(novasPreferencias) {
+    setPreferencias(novasPreferencias)
+    salvarPreferencias(novasPreferencias)
+  }
+
+  function handleConcluirOnboarding(novoPerfil) {
+    setPerfil(novoPerfil)
+    salvarPerfil(novoPerfil)
+  }
+
+  if (!perfil) {
+    return <TelaBoasVindas onConcluir={handleConcluirOnboarding} />
+  }
+
   if (segurancaConfig && !desbloqueado) {
-    return <TelaBloqueio segurancaConfig={segurancaConfig} onDesbloquear={() => setDesbloqueado(true)} />
+    return (
+      <TelaBloqueio
+        segurancaConfig={segurancaConfig}
+        frase={perfil.frase}
+        onDesbloquear={() => setDesbloqueado(true)}
+      />
+    )
   }
 
   return (
@@ -3309,14 +3623,14 @@ export default function App() {
       }}
     >
       {abaAtiva === 'dashboard' && (
-        <Dashboard
+        <Inicio
           transacoes={transacoes}
           onEditar={handleIniciarEdicao}
           onExcluir={handleExcluir}
-          onAbrirPlanejamento={() => setAbaAtiva('planejamento')}
-          onAbrirRelatorios={() => setAbaAtiva('relatorios')}
+          nome={perfil.nome}
+          preferencias={preferencias}
           onAbrirFilhos={() => setAbaAtiva('filhos')}
-          onAbrirAssistente={() => setAbaAtiva('assistente')}
+          onAbrirPlanejamento={() => setAbaAtiva('planejamento')}
           onAbrirConfiguracoes={() => setAbaAtiva('configuracoes')}
         />
       )}
@@ -3325,11 +3639,10 @@ export default function App() {
           segurancaConfig={segurancaConfig}
           onSalvarSeguranca={handleSalvarSeguranca}
           onRemoverSeguranca={handleRemoverSeguranca}
+          preferencias={preferencias}
+          onSalvarPreferencias={handleSalvarPreferencias}
           onVoltar={() => setAbaAtiva('dashboard')}
         />
-      )}
-      {abaAtiva === 'relatorios' && (
-        <Relatorios transacoes={transacoes} onVoltar={() => setAbaAtiva('dashboard')} />
       )}
       {abaAtiva === 'filhos' && (
         <Filhos
@@ -3362,7 +3675,6 @@ export default function App() {
           onVoltar={() => setAbaAtiva('dashboard')}
         />
       )}
-      {abaAtiva === 'calendario' && <Calendario transacoes={transacoes} />}
       {abaAtiva === 'cartoes' && (
         <Cartoes
           cartoes={cartoes}
@@ -3399,6 +3711,13 @@ export default function App() {
           transacaoInicial={transacaoEditando}
           filhos={filhos}
         />
+      )}
+
+      {abaAtiva !== 'adicionar' && abaAtiva !== 'assistente' && (
+        <>
+          <BotaoFlutuante icone="🤖" cor="#0D9488" posicaoInferior={148} onClick={() => setAbaAtiva('assistente')} />
+          <BotaoFlutuante icone="➕" cor="#6366F1" posicaoInferior={82} onClick={() => setAbaAtiva('adicionar')} />
+        </>
       )}
 
       <BottomNav abaAtiva={abaAtiva} onMudarAba={handleMudarAba} />
