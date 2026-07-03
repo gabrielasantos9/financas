@@ -47,28 +47,37 @@ function formatarDataCurta(dataStr) {
   return `${dia}/${mes}`
 }
 
-// Cores de gradiente por banco (reconhece o nome digitado no cadastro do cartão)
+// Cores de gradiente por banco (reconhece o nome digitado no cadastro do cartão,
+// ignorando maiúsculas/minúsculas, acentos e texto extra como "Cartão Nubank")
 function corDoBanco(banco) {
-  const nome = (banco || '').trim().toLowerCase()
-  const mapa = {
-    nubank: ['#8A05BE', '#A020D0'],
-    inter: ['#FF7A00', '#FFA940'],
-    itau: ['#EC7000', '#FF9900'],
-    'itaú': ['#EC7000', '#FF9900'],
-    bradesco: ['#CC092F', '#E4002B'],
-    santander: ['#EC0000', '#FF3333'],
-    caixa: ['#0066B3', '#0086D6'],
-    'banco do brasil': ['#F8D117', '#FBE84D'],
-    bb: ['#F8D117', '#FBE84D'],
-    c6: ['#1A1A1A', '#3D3D3D'],
-    picpay: ['#21C25E', '#00A868'],
-    next: ['#00FF5F', '#00CC4C'],
-    original: ['#1DB67B', '#00A15D'],
-    will: ['#FF5A00', '#FF8800'],
-    xp: ['#000000', '#333333'],
-    neon: ['#00E3A5', '#00BD8A'],
+  const nome = (banco || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // remove acentos
+    .trim()
+    .toLowerCase()
+
+  const regras = [
+    ['nubank', ['#8A05BE', '#A020D0']],
+    ['inter', ['#FF7A00', '#FFA940']],
+    ['itau', ['#EC7000', '#FF9900']],
+    ['bradesco', ['#CC092F', '#E4002B']],
+    ['santander', ['#EC0000', '#FF3333']],
+    ['caixa', ['#0066B3', '#0086D6']],
+    ['banco do brasil', ['#F8D117', '#FBE84D']],
+    ['bb', ['#F8D117', '#FBE84D']],
+    ['c6', ['#1A1A1A', '#3D3D3D']],
+    ['picpay', ['#21C25E', '#00A868']],
+    ['next', ['#00FF5F', '#00CC4C']],
+    ['original', ['#1DB67B', '#00A15D']],
+    ['will', ['#FF5A00', '#FF8800']],
+    ['xp', ['#000000', '#333333']],
+    ['neon', ['#00E3A5', '#00BD8A']],
+  ]
+
+  for (const [chave, cores] of regras) {
+    if (nome.includes(chave)) return cores
   }
-  return mapa[nome] || ['#4F46E5', '#6366F1']
+  return ['#4F46E5', '#6366F1']
 }
 
 // ---------- Persistência (localStorage) ----------
@@ -294,9 +303,32 @@ const NOMES_MESES = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
 ]
 
+// Gera o resumo dos últimos N meses (receitas, despesas, saldo do mês e saldo acumulado)
+function calcularResumoMensal(transacoes, quantidadeMeses) {
+  const hoje = new Date()
+  const chaves = []
+  for (let i = quantidadeMeses - 1; i >= 0; i--) {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1)
+    chaves.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+  }
+
+  const hojeStr = hoje.toISOString().slice(0, 10)
+  let acumulado = transacoes
+    .filter((t) => t.data < `${chaves[0]}-01`)
+    .reduce((s, t) => s + (t.tipo === 'receita' ? t.valor : -t.valor), 0)
+
+  return chaves.map((chave) => {
+    const doMes = transacoes.filter((t) => t.data.startsWith(chave))
+    const receitas = doMes.filter((t) => t.tipo === 'receita').reduce((s, t) => s + t.valor, 0)
+    const despesas = doMes.filter((t) => t.tipo === 'despesa').reduce((s, t) => s + t.valor, 0)
+    acumulado += receitas - despesas
+    return { chave, receitas, despesas, saldo: receitas - despesas, acumulado }
+  })
+}
+
 // ---------- Componente: Dashboard ----------
 
-function Dashboard({ transacoes, onEditar, onExcluir, onAbrirPlanejamento }) {
+function Dashboard({ transacoes, onEditar, onExcluir, onAbrirPlanejamento, onAbrirRelatorios }) {
   const hojeStr = new Date().toISOString().slice(0, 10)
   const doMes = transacoes.filter((t) => t.data.startsWith(mesAtual()))
 
@@ -330,14 +362,22 @@ function Dashboard({ transacoes, onEditar, onExcluir, onAbrirPlanejamento }) {
 
   return (
     <div style={{ padding: 20 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <h1 style={{ fontSize: 20, color: '#fff' }}>Olá! 👋</h1>
-        <button
-          onClick={onAbrirPlanejamento}
-          style={{ background: '#1E293B', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}
-        >
-          📋 Planejamento
-        </button>
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ fontSize: 20, color: '#fff', marginBottom: 10 }}>Olá! 👋</h1>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={onAbrirPlanejamento}
+            style={{ flex: 1, background: '#1E293B', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 10px', fontSize: 12 }}
+          >
+            📋 Planejamento
+          </button>
+          <button
+            onClick={onAbrirRelatorios}
+            style={{ flex: 1, background: '#1E293B', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 10px', fontSize: 12 }}
+          >
+            📊 Relatórios
+          </button>
+        </div>
       </div>
 
       <div
@@ -2141,6 +2181,169 @@ function Planejamento({
   )
 }
 
+// ---------- Componente: Relatórios ----------
+
+function Relatorios({ transacoes, onVoltar }) {
+  const resumo = calcularResumoMensal(transacoes, 6)
+  const maxValor = Math.max(...resumo.flatMap((m) => [m.receitas, m.despesas]), 1)
+
+  const chaveMesAtual = mesAtual()
+  const doMesAtual = transacoes.filter((t) => t.data.startsWith(chaveMesAtual) && t.tipo === 'despesa')
+  const porCategoria = {}
+  doMesAtual.forEach((t) => {
+    porCategoria[t.categoria] = (porCategoria[t.categoria] || 0) + t.valor
+  })
+  const totalDespesasMes = Object.values(porCategoria).reduce((s, v) => s + v, 0)
+  const categoriasOrdenadas = Object.entries(porCategoria).sort((a, b) => b[1] - a[1])
+  const maiorCategoria = categoriasOrdenadas[0]
+
+  const mesesComDados = resumo.filter((m) => m.receitas > 0 || m.despesas > 0)
+  const economiaMedia =
+    mesesComDados.length > 0
+      ? mesesComDados.reduce((s, m) => s + m.saldo, 0) / mesesComDados.length
+      : 0
+
+  function nomeMesAbreviado(chave) {
+    const [, mes] = chave.split('-')
+    return NOMES_MESES[Number(mes) - 1].slice(0, 3)
+  }
+
+  return (
+    <div style={{ padding: 20 }}>
+      <button
+        onClick={onVoltar}
+        style={{ background: 'transparent', border: 'none', color: '#94A3B8', fontSize: 14, marginBottom: 12, padding: 0 }}
+      >
+        ‹ Voltar
+      </button>
+      <h1 style={{ fontSize: 20, color: '#fff', marginBottom: 20 }}>Relatórios</h1>
+
+      <div
+        style={{
+          background: economiaMedia >= 0 ? '#1E293B' : '#1E293B',
+          borderRadius: 14,
+          padding: 16,
+          marginBottom: 20,
+        }}
+      >
+        <p style={{ color: '#94A3B8', fontSize: 12, marginBottom: 4 }}>
+          Você economiza em média, por mês
+        </p>
+        <p style={{ color: economiaMedia >= 0 ? '#22C55E' : '#EF4444', fontSize: 22, fontWeight: 700 }}>
+          {formatarMoeda(economiaMedia)}
+        </p>
+      </div>
+
+      {maiorCategoria && (
+        <div style={{ background: '#1E293B', borderRadius: 14, padding: 16, marginBottom: 20 }}>
+          <p style={{ color: '#94A3B8', fontSize: 12, marginBottom: 4 }}>Onde você mais gasta este mês</p>
+          <p style={{ color: '#fff', fontSize: 16, fontWeight: 600 }}>
+            {infoCategoria('despesa', maiorCategoria[0]).icone} {infoCategoria('despesa', maiorCategoria[0]).label}
+          </p>
+          <p style={{ color: '#F59E0B', fontSize: 13 }}>
+            {formatarMoeda(maiorCategoria[1])} ·{' '}
+            {totalDespesasMes > 0 ? Math.round((maiorCategoria[1] / totalDespesasMes) * 100) : 0}% dos gastos
+          </p>
+        </div>
+      )}
+
+      <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 12 }}>
+        Receitas x Despesas — últimos 6 meses
+      </p>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-end',
+          gap: 10,
+          height: 140,
+          marginBottom: 8,
+          background: '#1E293B',
+          borderRadius: 14,
+          padding: '16px 12px 8px',
+        }}
+      >
+        {resumo.map((m) => (
+          <div key={m.chave} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%' }}>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: 3 }}>
+              <div
+                title="Receitas"
+                style={{
+                  width: 10,
+                  height: `${(m.receitas / maxValor) * 100}%`,
+                  minHeight: m.receitas > 0 ? 2 : 0,
+                  background: '#22C55E',
+                  borderRadius: 3,
+                }}
+              />
+              <div
+                title="Despesas"
+                style={{
+                  width: 10,
+                  height: `${(m.despesas / maxValor) * 100}%`,
+                  minHeight: m.despesas > 0 ? 2 : 0,
+                  background: '#EF4444',
+                  borderRadius: 3,
+                }}
+              />
+            </div>
+            <p style={{ color: '#64748B', fontSize: 10, marginTop: 6 }}>{nomeMesAbreviado(m.chave)}</p>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ width: 8, height: 8, borderRadius: 8, background: '#22C55E' }} />
+          <span style={{ color: '#64748B', fontSize: 11 }}>Receitas</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ width: 8, height: 8, borderRadius: 8, background: '#EF4444' }} />
+          <span style={{ color: '#64748B', fontSize: 11 }}>Despesas</span>
+        </div>
+      </div>
+
+      <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 12 }}>
+        Evolução do saldo total — últimos 6 meses
+      </p>
+      <div style={{ background: '#1E293B', borderRadius: 14, padding: 16, marginBottom: 20 }}>
+        {resumo.map((m) => (
+          <div key={m.chave} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+            <p style={{ color: '#94A3B8', fontSize: 12 }}>{nomeMesAbreviado(m.chave)}</p>
+            <p style={{ color: m.acumulado >= 0 ? '#22C55E' : '#EF4444', fontSize: 12, fontWeight: 600 }}>
+              {formatarMoeda(m.acumulado)}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 12 }}>
+        Gastos por categoria — este mês
+      </p>
+      {categoriasOrdenadas.length === 0 && (
+        <p style={{ color: '#64748B', fontSize: 14 }}>Nenhuma despesa registrada este mês ainda.</p>
+      )}
+      {categoriasOrdenadas.map(([catId, valor]) => {
+        const cat = infoCategoria('despesa', catId)
+        const percentual = totalDespesasMes > 0 ? (valor / totalDespesasMes) * 100 : 0
+        return (
+          <div key={catId} style={{ marginBottom: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+              <span style={{ color: '#fff', fontSize: 13 }}>
+                {cat.icone} {cat.label}
+              </span>
+              <span style={{ color: '#94A3B8', fontSize: 13 }}>
+                {formatarMoeda(valor)} · {Math.round(percentual)}%
+              </span>
+            </div>
+            <div style={{ background: '#1E293B', borderRadius: 6, height: 6 }}>
+              <div style={{ width: `${percentual}%`, background: '#6366F1', height: 6, borderRadius: 6 }} />
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ---------- Componente: Navegação inferior ----------
 
 function BottomNav({ abaAtiva, onMudarAba }) {
@@ -2337,7 +2540,11 @@ export default function App() {
           onEditar={handleIniciarEdicao}
           onExcluir={handleExcluir}
           onAbrirPlanejamento={() => setAbaAtiva('planejamento')}
+          onAbrirRelatorios={() => setAbaAtiva('relatorios')}
         />
+      )}
+      {abaAtiva === 'relatorios' && (
+        <Relatorios transacoes={transacoes} onVoltar={() => setAbaAtiva('dashboard')} />
       )}
       {abaAtiva === 'planejamento' && (
         <Planejamento
