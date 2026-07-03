@@ -402,24 +402,9 @@ async function gerarHashPin(pin) {
     .join('')
 }
 
-// ---------- Persistência: Feedback ----------
-
-function carregarFeedbacks() {
-  try {
-    const dados = localStorage.getItem('feedbacks')
-    return dados ? JSON.parse(dados) : []
-  } catch {
-    return []
-  }
-}
-
-function salvarFeedbacks(feedbacks) {
-  localStorage.setItem('feedbacks', JSON.stringify(feedbacks))
-}
-
 // ---------- Componente: Dashboard ----------
 
-function Dashboard({ transacoes, onEditar, onExcluir, onAbrirPlanejamento, onAbrirRelatorios, onAbrirFilhos, onAbrirAssistente, onAbrirConfiguracoes, onAbrirFeedback }) {
+function Dashboard({ transacoes, onEditar, onExcluir, onAbrirPlanejamento, onAbrirRelatorios, onAbrirFilhos, onAbrirAssistente, onAbrirConfiguracoes }) {
   const hojeStr = new Date().toISOString().slice(0, 10)
   const doMes = transacoes.filter((t) => t.data.startsWith(mesAtual()))
 
@@ -489,12 +474,6 @@ function Dashboard({ transacoes, onEditar, onExcluir, onAbrirPlanejamento, onAbr
             style={{ flex: 1, background: '#1E293B', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 10px', fontSize: 12 }}
           >
             ⚙️ Segurança
-          </button>
-          <button
-            onClick={onAbrirFeedback}
-            style={{ flex: 1, background: '#1E293B', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 10px', fontSize: 12 }}
-          >
-            💬 Feedback
           </button>
         </div>
       </div>
@@ -3070,159 +3049,37 @@ function Configuracoes({ segurancaConfig, onSalvarSeguranca, onRemoverSeguranca,
   )
 }
 
-// ---------- Componente: Painel de Feedback ----------
+// ---------- Componente: Aviso de Privacidade (LGPD) ----------
 
-function PainelFeedback({ feedbacks, onAdicionarFeedback, onExcluirFeedback, onVoltar }) {
-  const [tipo, setTipo] = useState('sugestao')
-  const [texto, setTexto] = useState('')
-  const [nota, setNota] = useState(5)
-
-  const inputStyle = {
-    width: '100%',
-    padding: '12px 14px',
-    borderRadius: 10,
-    border: '1px solid #334155',
-    background: '#0F172A',
-    color: '#fff',
-    fontSize: 15,
-    marginBottom: 14,
-    boxSizing: 'border-box',
-    minHeight: 90,
-    resize: 'vertical',
-    fontFamily: 'inherit',
-  }
-
-  const tipos = [
-    { id: 'sugestao', label: '💡 Sugestão' },
-    { id: 'bug', label: '🐛 Bug' },
-    { id: 'avaliacao', label: '⭐ Avaliação' },
-  ]
-
-  function handleEnviar() {
-    if (!texto.trim()) {
-      alert('Escreva algo antes de enviar.')
-      return
-    }
-    onAdicionarFeedback({
-      id: Date.now(),
-      tipo,
-      texto: texto.trim(),
-      nota: tipo === 'avaliacao' ? nota : null,
-      data: new Date().toISOString().slice(0, 10),
-    })
-    setTexto('')
-    setNota(5)
-  }
-
+function AvisoPrivacidade({ onAceitar }) {
   return (
-    <div style={{ padding: 20 }}>
-      <button
-        onClick={onVoltar}
-        style={{ background: 'transparent', border: 'none', color: '#94A3B8', fontSize: 14, marginBottom: 12, padding: 0 }}
-      >
-        ‹ Voltar
-      </button>
-      <h1 style={{ fontSize: 20, color: '#fff', marginBottom: 20 }}>💬 Feedback</h1>
-
-      <div style={{ background: '#1E293B', borderRadius: 14, padding: 16, marginBottom: 20 }}>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-          {tipos.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTipo(t.id)}
-              style={{
-                flex: 1,
-                padding: 10,
-                borderRadius: 10,
-                border: 'none',
-                background: tipo === t.id ? '#6366F1' : '#0F172A',
-                color: '#fff',
-                fontSize: 12,
-                fontWeight: 600,
-              }}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        {tipo === 'avaliacao' && (
-          <div style={{ display: 'flex', gap: 6, marginBottom: 14, justifyContent: 'center' }}>
-            {[1, 2, 3, 4, 5].map((n) => (
-              <button
-                key={n}
-                onClick={() => setNota(n)}
-                style={{ background: 'transparent', border: 'none', fontSize: 26 }}
-              >
-                {n <= nota ? '⭐' : '☆'}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <textarea
-          style={inputStyle}
-          placeholder={
-            tipo === 'sugestao'
-              ? 'O que você gostaria que o app tivesse?'
-              : tipo === 'bug'
-              ? 'Descreva o que deu errado...'
-              : 'O que você achou do app?'
-          }
-          value={texto}
-          onChange={(e) => setTexto(e.target.value)}
-        />
-
-        <button
-          onClick={handleEnviar}
-          style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
-        >
-          Enviar
-        </button>
-      </div>
-
-      <p style={{ color: '#64748B', fontSize: 12, marginBottom: 12 }}>
-        Por enquanto os feedbacks ficam salvos só neste celular (ainda não temos um servidor
-        compartilhado). Quando tiver testadoras usando em outros celulares, cada uma verá só os
-        feedbacks que ela mesma enviou.
+    <div
+      style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        background: '#1E293B',
+        borderTop: '1px solid #334155',
+        padding: 20,
+        zIndex: 1000,
+      }}
+    >
+      <p style={{ color: '#fff', fontSize: 13, marginBottom: 6, fontWeight: 600 }}>
+        🔒 Seus dados ficam só no seu celular
       </p>
-
-      {feedbacks.length > 0 && (
-        <>
-          <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 8 }}>Enviados</p>
-          {[...feedbacks]
-            .sort((a, b) => new Date(b.data) - new Date(a.data))
-            .map((f) => (
-              <div
-                key={f.id}
-                style={{
-                  background: '#1E293B',
-                  borderRadius: 12,
-                  padding: 12,
-                  marginBottom: 8,
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                }}
-              >
-                <div>
-                  <p style={{ color: '#94A3B8', fontSize: 11 }}>
-                    {tipos.find((t) => t.id === f.tipo)?.label} · {f.data}
-                    {f.nota && ` · ${'⭐'.repeat(f.nota)}`}
-                  </p>
-                  <p style={{ color: '#fff', fontSize: 13 }}>{f.texto}</p>
-                </div>
-                <button
-                  onClick={() => onExcluirFeedback(f.id)}
-                  aria-label="Excluir feedback"
-                  style={{ background: 'transparent', border: 'none', fontSize: 14, padding: 6, cursor: 'pointer' }}
-                >
-                  🗑️
-                </button>
-              </div>
-            ))}
-        </>
-      )}
+      <p style={{ color: '#94A3B8', fontSize: 12, marginBottom: 14, lineHeight: 1.5 }}>
+        Suas transações, cartões, metas e configurações ficam salvos apenas no navegador deste
+        aparelho — não enviamos nada pra nenhum servidor. A única exceção é se você ativar o
+        Assistente com IA: nesse caso, um resumo dos seus dados financeiros (sem enviar a lista de
+        transações) é enviado pra Anthropic só na hora da pergunta, pra gerar a resposta.
+      </p>
+      <button
+        onClick={onAceitar}
+        style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
+      >
+        Entendi
+      </button>
     </div>
   )
 }
@@ -3283,8 +3140,8 @@ export default function App() {
   const [itensAnuais, setItensAnuais] = useState(carregarItensAnuais)
   const [filhos, setFilhos] = useState(carregarFilhos)
   const [segurancaConfig, setSegurancaConfig] = useState(carregarSeguranca)
-  const [feedbacks, setFeedbacks] = useState(carregarFeedbacks)
   const [desbloqueado, setDesbloqueado] = useState(false)
+  const [lgpdAceito, setLgpdAceito] = useState(() => localStorage.getItem('lgpdAceito') === 'true')
   const [abaAtiva, setAbaAtiva] = useState('dashboard')
   const [transacaoEditando, setTransacaoEditando] = useState(null)
 
@@ -3319,10 +3176,6 @@ export default function App() {
   useEffect(() => {
     salvarFilhos(filhos)
   }, [filhos])
-
-  useEffect(() => {
-    salvarFeedbacks(feedbacks)
-  }, [feedbacks])
 
   function handleMudarAba(novaAba) {
     setTransacaoEditando(null)
@@ -3442,14 +3295,6 @@ export default function App() {
     salvarSeguranca(null)
   }
 
-  function handleAdicionarFeedback(novoFeedback) {
-    setFeedbacks((atual) => [...atual, novoFeedback])
-  }
-
-  function handleExcluirFeedback(id) {
-    setFeedbacks((atual) => atual.filter((f) => f.id !== id))
-  }
-
   if (segurancaConfig && !desbloqueado) {
     return <TelaBloqueio segurancaConfig={segurancaConfig} onDesbloquear={() => setDesbloqueado(true)} />
   }
@@ -3473,7 +3318,6 @@ export default function App() {
           onAbrirFilhos={() => setAbaAtiva('filhos')}
           onAbrirAssistente={() => setAbaAtiva('assistente')}
           onAbrirConfiguracoes={() => setAbaAtiva('configuracoes')}
-          onAbrirFeedback={() => setAbaAtiva('feedback')}
         />
       )}
       {abaAtiva === 'configuracoes' && (
@@ -3481,14 +3325,6 @@ export default function App() {
           segurancaConfig={segurancaConfig}
           onSalvarSeguranca={handleSalvarSeguranca}
           onRemoverSeguranca={handleRemoverSeguranca}
-          onVoltar={() => setAbaAtiva('dashboard')}
-        />
-      )}
-      {abaAtiva === 'feedback' && (
-        <PainelFeedback
-          feedbacks={feedbacks}
-          onAdicionarFeedback={handleAdicionarFeedback}
-          onExcluirFeedback={handleExcluirFeedback}
           onVoltar={() => setAbaAtiva('dashboard')}
         />
       )}
@@ -3566,6 +3402,15 @@ export default function App() {
       )}
 
       <BottomNav abaAtiva={abaAtiva} onMudarAba={handleMudarAba} />
+
+      {!lgpdAceito && (
+        <AvisoPrivacidade
+          onAceitar={() => {
+            localStorage.setItem('lgpdAceito', 'true')
+            setLgpdAceito(true)
+          }}
+        />
+      )}
     </div>
   )
 }
