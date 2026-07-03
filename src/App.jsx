@@ -261,9 +261,42 @@ function calcularMediaDespesasMensais(transacoes) {
   return soma / ultimasChaves.length
 }
 
+// ---------- Persistência: Planejamento ----------
+
+function carregarPlanejamentos() {
+  try {
+    const dados = localStorage.getItem('planejamentos')
+    return dados ? JSON.parse(dados) : {}
+  } catch {
+    return {}
+  }
+}
+
+function salvarPlanejamentos(planejamentos) {
+  localStorage.setItem('planejamentos', JSON.stringify(planejamentos))
+}
+
+function carregarItensAnuais() {
+  try {
+    const dados = localStorage.getItem('itensAnuais')
+    return dados ? JSON.parse(dados) : []
+  } catch {
+    return []
+  }
+}
+
+function salvarItensAnuais(itens) {
+  localStorage.setItem('itensAnuais', JSON.stringify(itens))
+}
+
+const NOMES_MESES = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+]
+
 // ---------- Componente: Dashboard ----------
 
-function Dashboard({ transacoes, onEditar, onExcluir }) {
+function Dashboard({ transacoes, onEditar, onExcluir, onAbrirPlanejamento }) {
   const hojeStr = new Date().toISOString().slice(0, 10)
   const doMes = transacoes.filter((t) => t.data.startsWith(mesAtual()))
 
@@ -297,7 +330,15 @@ function Dashboard({ transacoes, onEditar, onExcluir }) {
 
   return (
     <div style={{ padding: 20 }}>
-      <h1 style={{ fontSize: 20, marginBottom: 20, color: '#fff' }}>Olá! 👋</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <h1 style={{ fontSize: 20, color: '#fff' }}>Olá! 👋</h1>
+        <button
+          onClick={onAbrirPlanejamento}
+          style={{ background: '#1E293B', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 12px', fontSize: 13 }}
+        >
+          📋 Planejamento
+        </button>
+      </div>
 
       <div
         style={{
@@ -1826,6 +1867,280 @@ function ReservaEmergencia({ reserva, transacoes, onSalvarConfig, onContribuir }
   )
 }
 
+// ---------- Componente: Formulário Item Anual ----------
+
+function FormItemAnual({ onSalvar, onCancelar, itemInicial }) {
+  const [nome, setNome] = useState(itemInicial?.nome || '')
+  const [valorEstimado, setValorEstimado] = useState(itemInicial ? String(itemInicial.valorEstimado) : '')
+  const [mes, setMes] = useState(itemInicial ? String(itemInicial.mes) : '1')
+
+  const emEdicao = Boolean(itemInicial)
+
+  const inputStyle = {
+    width: '100%',
+    padding: '12px 14px',
+    borderRadius: 10,
+    border: '1px solid #334155',
+    background: '#0F172A',
+    color: '#fff',
+    fontSize: 15,
+    marginBottom: 14,
+    boxSizing: 'border-box',
+  }
+
+  function handleSalvar() {
+    if (!nome.trim() || !valorEstimado || Number(valorEstimado) <= 0) {
+      alert('Preencha o nome e o valor estimado.')
+      return
+    }
+    onSalvar({
+      id: emEdicao ? itemInicial.id : Date.now(),
+      nome: nome.trim(),
+      valorEstimado: Number(valorEstimado),
+      mes: Number(mes),
+    })
+  }
+
+  return (
+    <div style={{ background: '#1E293B', borderRadius: 14, padding: 16, marginBottom: 16 }}>
+      <p style={{ color: '#fff', fontSize: 15, fontWeight: 600, marginBottom: 12 }}>
+        {emEdicao ? 'Editar item anual' : 'Novo item anual'}
+      </p>
+      <label style={{ color: '#94A3B8', fontSize: 13 }}>Nome</label>
+      <input
+        style={inputStyle}
+        placeholder="Ex: IPTU, 13º salário, Material escolar..."
+        value={nome}
+        onChange={(e) => setNome(e.target.value)}
+      />
+      <label style={{ color: '#94A3B8', fontSize: 13 }}>Valor estimado (R$)</label>
+      <input
+        style={inputStyle}
+        type="number"
+        inputMode="decimal"
+        placeholder="0,00"
+        value={valorEstimado}
+        onChange={(e) => setValorEstimado(e.target.value)}
+      />
+      <label style={{ color: '#94A3B8', fontSize: 13 }}>Mês previsto</label>
+      <select style={inputStyle} value={mes} onChange={(e) => setMes(e.target.value)}>
+        {NOMES_MESES.map((nomeMes, i) => (
+          <option key={i} value={i + 1}>
+            {nomeMes}
+          </option>
+        ))}
+      </select>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button
+          onClick={onCancelar}
+          style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#334155', color: '#fff', fontWeight: 600 }}
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={handleSalvar}
+          style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
+        >
+          {emEdicao ? 'Salvar alterações' : 'Salvar'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ---------- Componente: Planejamento (mensal e anual) ----------
+
+function Planejamento({
+  transacoes,
+  planejamentos,
+  itensAnuais,
+  onSalvarPlanejamentoMes,
+  onAdicionarItemAnual,
+  onEditarItemAnual,
+  onExcluirItemAnual,
+  onVoltar,
+}) {
+  const chave = mesAtual()
+  const planoAtual = planejamentos[chave] || { receitaPrevista: 0, despesaPrevista: 0 }
+  const [receitaPrevista, setReceitaPrevista] = useState(
+    planoAtual.receitaPrevista ? String(planoAtual.receitaPrevista) : ''
+  )
+  const [despesaPrevista, setDespesaPrevista] = useState(
+    planoAtual.despesaPrevista ? String(planoAtual.despesaPrevista) : ''
+  )
+  const [modoFormItem, setModoFormItem] = useState(null) // null | 'novo' | item
+
+  const inputStyle = {
+    width: '100%',
+    padding: '12px 14px',
+    borderRadius: 10,
+    border: '1px solid #334155',
+    background: '#0F172A',
+    color: '#fff',
+    fontSize: 15,
+    marginBottom: 14,
+    boxSizing: 'border-box',
+  }
+
+  const doMes = transacoes.filter((t) => t.data.startsWith(chave))
+  const receitaReal = doMes.filter((t) => t.tipo === 'receita').reduce((s, t) => s + t.valor, 0)
+  const despesaReal = doMes.filter((t) => t.tipo === 'despesa').reduce((s, t) => s + t.valor, 0)
+
+  const receitaPrevNum = Number(receitaPrevista) || 0
+  const despesaPrevNum = Number(despesaPrevista) || 0
+  const saldoEsperado = receitaPrevNum - despesaPrevNum
+
+  function handleSalvarPlano() {
+    onSalvarPlanejamentoMes(chave, { receitaPrevista: receitaPrevNum, despesaPrevista: despesaPrevNum })
+  }
+
+  const hoje = new Date()
+  const mesAtualNum = hoje.getMonth() + 1
+  const itensOrdenados = [...itensAnuais].sort((a, b) => a.mes - b.mes)
+
+  return (
+    <div style={{ padding: 20 }}>
+      <button
+        onClick={onVoltar}
+        style={{ background: 'transparent', border: 'none', color: '#94A3B8', fontSize: 14, marginBottom: 12, padding: 0 }}
+      >
+        ‹ Voltar
+      </button>
+      <h1 style={{ fontSize: 20, color: '#fff', marginBottom: 20 }}>Planejamento</h1>
+
+      <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 8 }}>
+        Planejamento de {NOMES_MESES[mesAtualNum - 1]}
+      </p>
+      <div style={{ background: '#1E293B', borderRadius: 14, padding: 16, marginBottom: 24 }}>
+        <label style={{ color: '#94A3B8', fontSize: 13 }}>Receita prevista</label>
+        <input
+          style={inputStyle}
+          type="number"
+          inputMode="decimal"
+          placeholder="0,00"
+          value={receitaPrevista}
+          onChange={(e) => setReceitaPrevista(e.target.value)}
+        />
+        <label style={{ color: '#94A3B8', fontSize: 13 }}>Despesa prevista</label>
+        <input
+          style={inputStyle}
+          type="number"
+          inputMode="decimal"
+          placeholder="0,00"
+          value={despesaPrevista}
+          onChange={(e) => setDespesaPrevista(e.target.value)}
+        />
+        <button
+          onClick={handleSalvarPlano}
+          style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700, marginBottom: 16 }}
+        >
+          Salvar plano do mês
+        </button>
+
+        <div style={{ borderTop: '1px solid #334155', paddingTop: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+            <p style={{ color: '#94A3B8', fontSize: 13 }}>Saldo esperado</p>
+            <p style={{ color: saldoEsperado >= 0 ? '#22C55E' : '#EF4444', fontSize: 13, fontWeight: 600 }}>
+              {formatarMoeda(saldoEsperado)}
+            </p>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+            <p style={{ color: '#94A3B8', fontSize: 13 }}>Receita real até agora</p>
+            <p style={{ color: '#22C55E', fontSize: 13 }}>{formatarMoeda(receitaReal)}</p>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <p style={{ color: '#94A3B8', fontSize: 13 }}>Despesa real até agora</p>
+            <p style={{ color: '#EF4444', fontSize: 13 }}>{formatarMoeda(despesaReal)}</p>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <p style={{ color: '#94A3B8', fontSize: 13 }}>Visão anual (13º, IPTU, férias...)</p>
+        {!modoFormItem && (
+          <button
+            onClick={() => setModoFormItem('novo')}
+            style={{ background: '#6366F1', border: 'none', color: '#fff', borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 600 }}
+          >
+            + Item
+          </button>
+        )}
+      </div>
+
+      {modoFormItem === 'novo' && (
+        <FormItemAnual
+          onSalvar={(item) => {
+            onAdicionarItemAnual(item)
+            setModoFormItem(null)
+          }}
+          onCancelar={() => setModoFormItem(null)}
+        />
+      )}
+      {modoFormItem && modoFormItem !== 'novo' && (
+        <FormItemAnual
+          itemInicial={modoFormItem}
+          onSalvar={(item) => {
+            onEditarItemAnual(item)
+            setModoFormItem(null)
+          }}
+          onCancelar={() => setModoFormItem(null)}
+        />
+      )}
+
+      {itensOrdenados.length === 0 && !modoFormItem && (
+        <p style={{ color: '#64748B', fontSize: 14 }}>
+          Nenhum item anual cadastrado. Adicione coisas como IPTU, IPVA, 13º ou material escolar.
+        </p>
+      )}
+
+      {itensOrdenados.map((item) => {
+        const proximo = item.mes === mesAtualNum || item.mes === (mesAtualNum % 12) + 1
+        return (
+          <div
+            key={item.id}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: proximo ? '#1E293B' : 'transparent',
+              border: proximo ? '1px solid #6366F1' : '1px solid #1E293B',
+              borderRadius: 12,
+              padding: '12px 14px',
+              marginBottom: 8,
+            }}
+          >
+            <div>
+              <p style={{ color: '#fff', fontSize: 14 }}>
+                {item.nome} {proximo && <span style={{ color: '#6366F1', fontSize: 11 }}>chegando</span>}
+              </p>
+              <p style={{ color: '#64748B', fontSize: 12 }}>{NOMES_MESES[item.mes - 1]}</p>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <p style={{ color: '#F59E0B', fontSize: 14, fontWeight: 600 }}>{formatarMoeda(item.valorEstimado)}</p>
+              <button
+                onClick={() => setModoFormItem(item)}
+                aria-label="Editar item"
+                style={{ background: 'transparent', border: 'none', fontSize: 14, padding: 6, cursor: 'pointer' }}
+              >
+                ✏️
+              </button>
+              <button
+                onClick={() => {
+                  if (window.confirm(`Excluir "${item.nome}"?`)) onExcluirItemAnual(item.id)
+                }}
+                aria-label="Excluir item"
+                style={{ background: 'transparent', border: 'none', fontSize: 14, padding: 6, cursor: 'pointer' }}
+              >
+                🗑️
+              </button>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ---------- Componente: Navegação inferior ----------
 
 function BottomNav({ abaAtiva, onMudarAba }) {
@@ -1878,6 +2193,8 @@ export default function App() {
   const [compras, setCompras] = useState(carregarCompras)
   const [metas, setMetas] = useState(carregarMetas)
   const [reserva, setReserva] = useState(carregarReserva)
+  const [planejamentos, setPlanejamentos] = useState(carregarPlanejamentos)
+  const [itensAnuais, setItensAnuais] = useState(carregarItensAnuais)
   const [abaAtiva, setAbaAtiva] = useState('dashboard')
   const [transacaoEditando, setTransacaoEditando] = useState(null)
 
@@ -1900,6 +2217,14 @@ export default function App() {
   useEffect(() => {
     salvarReserva(reserva)
   }, [reserva])
+
+  useEffect(() => {
+    salvarPlanejamentos(planejamentos)
+  }, [planejamentos])
+
+  useEffect(() => {
+    salvarItensAnuais(itensAnuais)
+  }, [itensAnuais])
 
   function handleMudarAba(novaAba) {
     setTransacaoEditando(null)
@@ -1981,6 +2306,22 @@ export default function App() {
     setReserva((atual) => (atual ? { ...atual, valorAtual: atual.valorAtual + valor } : atual))
   }
 
+  function handleSalvarPlanejamentoMes(chave, plano) {
+    setPlanejamentos((atual) => ({ ...atual, [chave]: plano }))
+  }
+
+  function handleAdicionarItemAnual(item) {
+    setItensAnuais((atual) => [...atual, item])
+  }
+
+  function handleEditarItemAnual(itemAtualizado) {
+    setItensAnuais((atual) => atual.map((i) => (i.id === itemAtualizado.id ? itemAtualizado : i)))
+  }
+
+  function handleExcluirItemAnual(id) {
+    setItensAnuais((atual) => atual.filter((i) => i.id !== id))
+  }
+
   return (
     <div
       style={{
@@ -1991,7 +2332,24 @@ export default function App() {
       }}
     >
       {abaAtiva === 'dashboard' && (
-        <Dashboard transacoes={transacoes} onEditar={handleIniciarEdicao} onExcluir={handleExcluir} />
+        <Dashboard
+          transacoes={transacoes}
+          onEditar={handleIniciarEdicao}
+          onExcluir={handleExcluir}
+          onAbrirPlanejamento={() => setAbaAtiva('planejamento')}
+        />
+      )}
+      {abaAtiva === 'planejamento' && (
+        <Planejamento
+          transacoes={transacoes}
+          planejamentos={planejamentos}
+          itensAnuais={itensAnuais}
+          onSalvarPlanejamentoMes={handleSalvarPlanejamentoMes}
+          onAdicionarItemAnual={handleAdicionarItemAnual}
+          onEditarItemAnual={handleEditarItemAnual}
+          onExcluirItemAnual={handleExcluirItemAnual}
+          onVoltar={() => setAbaAtiva('dashboard')}
+        />
       )}
       {abaAtiva === 'calendario' && <Calendario transacoes={transacoes} />}
       {abaAtiva === 'cartoes' && (
