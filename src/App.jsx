@@ -2850,8 +2850,9 @@ function TelaBloqueio({ segurancaConfig, frase, onDesbloquear }) {
         fontFamily: 'system-ui, sans-serif',
       }}
     >
-      <p style={{ fontSize: 32, marginBottom: 12 }}>💰</p>
-      <p style={{ color: '#fff', fontSize: 16, marginBottom: 8 }}>Digite seu PIN</p>
+      <p style={{ fontSize: 32, marginBottom: 12 }}>🌿</p>
+      <p style={{ color: '#fff', fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Mali</p>
+      <p style={{ color: '#fff', fontSize: 14, marginBottom: 8 }}>Digite seu PIN</p>
       {frase && (
         <p style={{ color: '#6366F1', fontSize: 13, marginBottom: 20, fontStyle: 'italic', textAlign: 'center', maxWidth: 260 }}>
           "{frase}"
@@ -3144,10 +3145,9 @@ function AvisoPrivacidade({ onAceitar }) {
         🔒 Seus dados ficam só no seu celular
       </p>
       <p style={{ color: '#94A3B8', fontSize: 12, marginBottom: 14, lineHeight: 1.5 }}>
-        Suas transações, cartões, metas e configurações ficam salvos apenas no navegador deste
-        aparelho — não enviamos nada pra nenhum servidor. A única exceção é se você ativar o
-        Assistente com IA: nesse caso, um resumo dos seus dados financeiros (sem enviar a lista de
-        transações) é enviado pra Anthropic só na hora da pergunta, pra gerar a resposta.
+        O Mali guarda suas informações apenas no navegador deste aparelho — não enviamos nada
+        pra nenhum servidor. A única exceção é o Assistente com IA: nesse caso, um resumo
+        financeiro (sem lista de transações) é enviado só no momento da pergunta.
       </p>
       <button
         onClick={onAceitar}
@@ -3201,12 +3201,12 @@ function TelaBoasVindas({ onConcluir }) {
         boxSizing: 'border-box',
       }}
     >
-      <p style={{ fontSize: 40, textAlign: 'center', marginBottom: 8 }}>💰</p>
-      <p style={{ color: '#fff', fontSize: 22, fontWeight: 700, textAlign: 'center', marginBottom: 4 }}>
-        Minhas Finanças
+      <p style={{ fontSize: 40, textAlign: 'center', marginBottom: 8 }}>🌿</p>
+      <p style={{ color: '#fff', fontSize: 26, fontWeight: 700, textAlign: 'center', marginBottom: 4 }}>
+        Mali
       </p>
-      <p style={{ color: '#94A3B8', fontSize: 14, textAlign: 'center', marginBottom: 32 }}>
-        Vamos configurar seu app
+      <p style={{ color: '#94A3B8', fontSize: 13, textAlign: 'center', marginBottom: 32 }}>
+        o controle descomplicado das suas finanças
       </p>
 
       <label style={{ color: '#94A3B8', fontSize: 13, marginBottom: 6, display: 'block' }}>
