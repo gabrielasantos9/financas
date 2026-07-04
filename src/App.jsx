@@ -3254,6 +3254,7 @@ function Inicio({
   onAbrirFilhos,
   onAbrirPlanejamento,
   onAbrirConfiguracoes,
+  onAbrirAssistente,
 }) {
   const [subAba, setSubAba] = useState('geral')
 
@@ -3294,6 +3295,13 @@ function Inicio({
               style={{ background: 'transparent', border: 'none', fontSize: 18, padding: 4 }}
             >
               📋
+            </button>
+            <button
+              onClick={onAbrirAssistente}
+              aria-label="Assistente IA"
+              style={{ background: 'transparent', border: 'none', fontSize: 18, padding: 4 }}
+            >
+              🤖
             </button>
             <button
               onClick={onAbrirConfiguracoes}
@@ -3632,6 +3640,7 @@ export default function App() {
           onAbrirFilhos={() => setAbaAtiva('filhos')}
           onAbrirPlanejamento={() => setAbaAtiva('planejamento')}
           onAbrirConfiguracoes={() => setAbaAtiva('configuracoes')}
+          onAbrirAssistente={() => setAbaAtiva('assistente')}
         />
       )}
       {abaAtiva === 'configuracoes' && (
@@ -3713,11 +3722,8 @@ export default function App() {
         />
       )}
 
-      {abaAtiva !== 'adicionar' && abaAtiva !== 'assistente' && (
-        <>
-          <BotaoFlutuante icone="🤖" cor="#0D9488" posicaoInferior={148} onClick={() => setAbaAtiva('assistente')} />
-          <BotaoFlutuante icone="➕" cor="#6366F1" posicaoInferior={82} onClick={() => setAbaAtiva('adicionar')} />
-        </>
+      {abaAtiva !== 'adicionar' && (
+        <BotaoFlutuante icone="➕" cor="#6366F1" posicaoInferior={82} onClick={() => setAbaAtiva('adicionar')} />
       )}
 
       <BottomNav abaAtiva={abaAtiva} onMudarAba={handleMudarAba} />
