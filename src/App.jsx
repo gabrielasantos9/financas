@@ -167,6 +167,42 @@ function salvarCartoes(cartoes) {
   localStorage.setItem('cartoes', JSON.stringify(cartoes))
 }
 
+// ---------- Tipos de Conta ----------
+
+const TIPOS_CONTA = [
+  { id: 'corrente', label: 'Conta Corrente', icone: '🏦' },
+  { id: 'poupanca', label: 'Poupança', icone: '💰' },
+  { id: 'debito', label: 'Cartão de Débito', icone: '💳' },
+  { id: 'alimentacao', label: 'Alimentação / Refeição', icone: '🍽️' },
+  { id: 'credito', label: 'Cartão de Crédito', icone: '💜' },
+  { id: 'dinheiro', label: 'Dinheiro', icone: '💵' },
+]
+
+function infoTipoConta(tipoId) {
+  return TIPOS_CONTA.find((t) => t.id === tipoId) || TIPOS_CONTA[0]
+}
+
+// ---------- Persistência: Contas ----------
+
+function carregarContas() {
+  try {
+    const dados = localStorage.getItem('contas')
+    // migração: cartões antigos viram contas de crédito
+    const cartõesAntigos = localStorage.getItem('cartoes')
+    if (!dados && cartõesAntigos) {
+      const cartoes = JSON.parse(cartõesAntigos)
+      return cartoes.map((c) => ({ ...c, tipo: 'credito' }))
+    }
+    return dados ? JSON.parse(dados) : []
+  } catch {
+    return []
+  }
+}
+
+function salvarContas(contas) {
+  localStorage.setItem('contas', JSON.stringify(contas))
+}
+
 // ---------- Persistência: Metas ----------
 
 function carregarMetas() {
@@ -288,7 +324,7 @@ function salvarFilhos(filhos) {
 }
 
 // Monta um resumo financeiro compacto pra enviar à IA (não envia a lista completa de transações)
-function construirContextoIA(transacoes, metas, reserva, cartoes) {
+function construirContextoIA(transacoes, metas, reserva, contas) {
   const hojeStr = new Date().toISOString().slice(0, 10)
   const chaveMes = mesAtual()
   const doMes = transacoes.filter((t) => t.data.startsWith(chaveMes))
@@ -315,7 +351,7 @@ function construirContextoIA(transacoes, metas, reserva, cartoes) {
     reservaDeEmergencia: reserva
       ? { jaGuardado: reserva.valorAtual, mesesDesejados: reserva.mesesDesejados }
       : null,
-    quantidadeDeCartoes: cartoes.length,
+    quantidadeDeContas: contas.length,
   }
 }
 
@@ -470,7 +506,7 @@ function Dashboard({ transacoes, onEditar, onExcluir, limiteGastosMensal }) {
 
 // ---------- Componente: Adicionar ----------
 
-function Adicionar({ onAdicionar, onEditar, onCancelarEdicao, transacaoInicial, filhos }) {
+function Adicionar({ onAdicionar, onEditar, onCancelarEdicao, transacaoInicial, filhos, contas }) {
   const [tipo, setTipo] = useState(transacaoInicial?.tipo || 'despesa')
   const [categoria, setCategoria] = useState(transacaoInicial?.categoria || CATEGORIAS_DESPESA[0].id)
   const [descricao, setDescricao] = useState(transacaoInicial?.descricao || '')
@@ -478,6 +514,7 @@ function Adicionar({ onAdicionar, onEditar, onCancelarEdicao, transacaoInicial, 
   const [data, setData] = useState(transacaoInicial?.data || new Date().toISOString().slice(0, 10))
   const [fixa, setFixa] = useState(transacaoInicial?.fixa || false)
   const [filhoId, setFilhoId] = useState(transacaoInicial?.filhoId || '')
+  const [contaId, setContaId] = useState(transacaoInicial?.contaId || '')
 
   const emEdicao = Boolean(transacaoInicial)
 
@@ -501,6 +538,7 @@ function Adicionar({ onAdicionar, onEditar, onCancelarEdicao, transacaoInicial, 
       data,
       fixa: tipo === 'despesa' ? fixa : false,
       filhoId: tipo === 'despesa' && categoria === 'filhos' && filhoId ? filhoId : null,
+      contaId: contaId || null,
     }
     if (emEdicao) {
       onEditar(dadosTransacao)
@@ -591,6 +629,25 @@ function Adicionar({ onAdicionar, onEditar, onCancelarEdicao, transacaoInicial, 
 
       <label style={{ color: '#94A3B8', fontSize: 13 }}>Data</label>
       <input style={inputStyle} type="date" value={data} onChange={(e) => setData(e.target.value)} />
+
+      {contas && contas.length > 0 && (
+        <>
+          <label style={{ color: '#94A3B8', fontSize: 13 }}>
+            {tipo === 'receita' ? 'Entrou em qual conta?' : 'Saiu de qual conta?'}
+          </label>
+          <select style={inputStyle} value={contaId} onChange={(e) => setContaId(e.target.value)}>
+            <option value="">Não especificar</option>
+            {contas.map((c) => {
+              const info = infoTipoConta(c.tipo)
+              return (
+                <option key={c.id} value={c.id}>
+                  {info.icone} {c.nome}
+                </option>
+              )
+            })}
+          </select>
+        </>
+      )}
 
       {tipo === 'despesa' && categoria === 'filhos' && filhos && filhos.length > 0 && (
         <>
@@ -872,229 +929,210 @@ function Calendario({ transacoes }) {
   )
 }
 
-// ---------- Componente: Formulário Novo Cartão ----------
+// ---------- Componente: Formulário Nova Conta ----------
 
-function FormNovoCartao({ onSalvar, onCancelar, cartaoInicial }) {
-  const [nome, setNome] = useState(cartaoInicial?.nome || '')
-  const [banco, setBanco] = useState(cartaoInicial?.banco || '')
-  const [diaFechamento, setDiaFechamento] = useState(cartaoInicial ? String(cartaoInicial.diaFechamento) : '')
-  const [diaVencimento, setDiaVencimento] = useState(cartaoInicial ? String(cartaoInicial.diaVencimento) : '')
+function FormNovaConta({ onSalvar, onCancelar, contaInicial }) {
+  const [nome, setNome] = useState(contaInicial?.nome || '')
+  const [tipo, setTipo] = useState(contaInicial?.tipo || 'corrente')
+  const [banco, setBanco] = useState(contaInicial?.banco || '')
+  const [diaFechamento, setDiaFechamento] = useState(contaInicial?.diaFechamento ? String(contaInicial.diaFechamento) : '')
+  const [diaVencimento, setDiaVencimento] = useState(contaInicial?.diaVencimento ? String(contaInicial.diaVencimento) : '')
 
-  const emEdicao = Boolean(cartaoInicial)
+  const emEdicao = Boolean(contaInicial)
+  const ehCredito = tipo === 'credito'
 
   const inputStyle = {
-    width: '100%',
-    padding: '12px 14px',
-    borderRadius: 10,
-    border: '1px solid #334155',
-    background: '#0F172A',
-    color: '#fff',
-    fontSize: 15,
-    marginBottom: 14,
-    boxSizing: 'border-box',
+    width: '100%', padding: '12px 14px', borderRadius: 10,
+    border: '1px solid #334155', background: '#0F172A',
+    color: '#fff', fontSize: 15, marginBottom: 14, boxSizing: 'border-box',
   }
 
   function handleSalvar() {
-    if (!nome.trim() || !diaFechamento || !diaVencimento) {
-      alert('Preencha nome, dia de fechamento e vencimento.')
-      return
-    }
-    const fechamento = Number(diaFechamento)
-    const vencimento = Number(diaVencimento)
-    if (fechamento < 1 || fechamento > 31 || vencimento < 1 || vencimento > 31) {
-      alert('Os dias devem estar entre 1 e 31.')
-      return
+    if (!nome.trim()) { alert('Preencha o nome da conta.'); return }
+    if (ehCredito && (!diaFechamento || !diaVencimento)) {
+      alert('Preencha o dia de fechamento e vencimento.'); return
     }
     onSalvar({
-      id: emEdicao ? cartaoInicial.id : Date.now(),
+      id: emEdicao ? contaInicial.id : Date.now(),
       nome: nome.trim(),
+      tipo,
       banco: banco.trim(),
-      diaFechamento: fechamento,
-      diaVencimento: vencimento,
-      faturas: cartaoInicial?.faturas || {},
+      diaFechamento: diaFechamento ? Number(diaFechamento) : null,
+      diaVencimento: diaVencimento ? Number(diaVencimento) : null,
+      faturas: contaInicial?.faturas || {},
     })
   }
 
   return (
     <div style={{ background: '#1E293B', borderRadius: 14, padding: 16, marginBottom: 16 }}>
       <p style={{ color: '#fff', fontSize: 15, fontWeight: 600, marginBottom: 12 }}>
-        {emEdicao ? 'Editar cartão' : 'Novo cartão'}
+        {emEdicao ? 'Editar conta' : 'Nova conta'}
       </p>
-      <label style={{ color: '#94A3B8', fontSize: 13 }}>Nome do cartão</label>
-      <input
-        style={inputStyle}
-        placeholder="Ex: Nubank, Inter..."
-        value={nome}
-        onChange={(e) => setNome(e.target.value)}
-      />
-      <label style={{ color: '#94A3B8', fontSize: 13 }}>Banco (opcional)</label>
-      <input
-        style={inputStyle}
-        placeholder="Ex: Nubank"
-        value={banco}
-        onChange={(e) => setBanco(e.target.value)}
-      />
-      <div style={{ display: 'flex', gap: 10 }}>
-        <div style={{ flex: 1 }}>
-          <label style={{ color: '#94A3B8', fontSize: 13 }}>Dia fechamento</label>
-          <input
-            style={inputStyle}
-            type="number"
-            inputMode="numeric"
-            placeholder="Ex: 20"
-            value={diaFechamento}
-            onChange={(e) => setDiaFechamento(e.target.value)}
-          />
-        </div>
-        <div style={{ flex: 1 }}>
-          <label style={{ color: '#94A3B8', fontSize: 13 }}>Dia vencimento</label>
-          <input
-            style={inputStyle}
-            type="number"
-            inputMode="numeric"
-            placeholder="Ex: 27"
-            value={diaVencimento}
-            onChange={(e) => setDiaVencimento(e.target.value)}
-          />
-        </div>
+
+      <label style={{ color: '#94A3B8', fontSize: 13 }}>Tipo</label>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+        {TIPOS_CONTA.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTipo(t.id)}
+            style={{
+              padding: '6px 10px', borderRadius: 8, border: 'none', fontSize: 12,
+              background: tipo === t.id ? '#6366F1' : '#0F172A',
+              color: '#fff', fontWeight: tipo === t.id ? 700 : 400,
+            }}
+          >
+            {t.icone} {t.label}
+          </button>
+        ))}
       </div>
+
+      <label style={{ color: '#94A3B8', fontSize: 13 }}>Nome</label>
+      <input style={inputStyle} placeholder="Ex: Nubank, Caixa, VA..." value={nome} onChange={(e) => setNome(e.target.value)} />
+
+      <label style={{ color: '#94A3B8', fontSize: 13 }}>Banco / Operadora (opcional)</label>
+      <input style={inputStyle} placeholder="Ex: Nubank, Sodexo..." value={banco} onChange={(e) => setBanco(e.target.value)} />
+
+      {ehCredito && (
+        <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            <label style={{ color: '#94A3B8', fontSize: 13 }}>Dia fechamento</label>
+            <input style={inputStyle} type="number" inputMode="numeric" placeholder="Ex: 20" value={diaFechamento} onChange={(e) => setDiaFechamento(e.target.value)} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={{ color: '#94A3B8', fontSize: 13 }}>Dia vencimento</label>
+            <input style={inputStyle} type="number" inputMode="numeric" placeholder="Ex: 27" value={diaVencimento} onChange={(e) => setDiaVencimento(e.target.value)} />
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 10 }}>
-        <button
-          onClick={onCancelar}
-          style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#334155', color: '#fff', fontWeight: 600 }}
-        >
-          Cancelar
-        </button>
-        <button
-          onClick={handleSalvar}
-          style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
-        >
-          {emEdicao ? 'Salvar alterações' : 'Salvar'}
-        </button>
+        <button onClick={onCancelar} style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#334155', color: '#fff', fontWeight: 600 }}>Cancelar</button>
+        <button onClick={handleSalvar} style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}>{emEdicao ? 'Salvar' : 'Adicionar'}</button>
       </div>
     </div>
   )
 }
 
-// ---------- Componente: Cartões ----------
+// ---------- Componente: Contas e Cartões ----------
 
-function Cartoes({ cartoes, onAdicionarCartao, onEditarCartao, onExcluirCartao }) {
-  const [modoFormCartao, setModoFormCartao] = useState(null)
-  const [cartaoExpandido, setCartaoExpandido] = useState(null)
+function Contas({ contas, transacoes, onAdicionarConta, onEditarConta, onExcluirConta }) {
+  const [modoForm, setModoForm] = useState(null)
+  const [contaExpandida, setContaExpandida] = useState(null)
   const [editandoFatura, setEditandoFatura] = useState(null)
   const [valorFaturaInput, setValorFaturaInput] = useState('')
 
   const hoje = new Date()
   const chaveMesAtual = mesAtual()
 
-  // Quantos dias faltam pro dia D deste mês (ou próximo mês se já passou)
   function diasAte(dia) {
+    if (!dia) return 99
     const alvo = new Date(hoje.getFullYear(), hoje.getMonth(), dia)
     if (alvo < hoje) alvo.setMonth(alvo.getMonth() + 1)
     return Math.ceil((alvo - hoje) / (1000 * 60 * 60 * 24))
   }
 
-  function handleSalvarFatura(cartao) {
+  function saldoConta(conta) {
+    return transacoes
+      .filter((t) => t.contaId === conta.id)
+      .reduce((s, t) => s + (t.tipo === 'receita' ? t.valor : -t.valor), 0)
+  }
+
+  function handleSalvarFatura(conta) {
     const valor = Number(valorFaturaInput)
-    if (!valorFaturaInput || valor < 0) {
-      alert('Digite um valor válido.')
-      return
-    }
-    const novasFaturas = { ...cartao.faturas, [chaveMesAtual]: valor }
-    onEditarCartao({ ...cartao, faturas: novasFaturas })
+    if (!valorFaturaInput || valor < 0) { alert('Digite um valor válido.'); return }
+    onEditarConta({ ...conta, faturas: { ...conta.faturas, [chaveMesAtual]: valor } })
     setEditandoFatura(null)
     setValorFaturaInput('')
   }
 
   return (
-    <div style={{ padding: 16, background: '#0F172A', minHeight: '100vh' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <h1 style={{ fontSize: 20, color: '#fff' }}>Cartões</h1>
-        {!modoFormCartao && (
-          <button
-            onClick={() => setModoFormCartao('novo')}
-            style={{ background: '#6366F1', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600 }}
-          >
-            + Cartão
-          </button>
+    <div style={{ padding: '8px 14px', background: '#0F172A', minHeight: '100vh' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <h1 style={{ fontSize: 18, color: '#fff' }}>Contas e Cartões</h1>
+        {!modoForm && (
+          <button onClick={() => setModoForm('novo')} style={{ background: '#6366F1', border: 'none', color: '#fff', borderRadius: 8, padding: '7px 12px', fontSize: 13, fontWeight: 600 }}>+ Conta</button>
         )}
       </div>
 
-      {modoFormCartao === 'novo' && (
-        <FormNovoCartao
-          onSalvar={(cartao) => { onAdicionarCartao(cartao); setModoFormCartao(null) }}
-          onCancelar={() => setModoFormCartao(null)}
-        />
+      {modoForm === 'novo' && (
+        <FormNovaConta onSalvar={(c) => { onAdicionarConta(c); setModoForm(null) }} onCancelar={() => setModoForm(null)} />
       )}
-      {modoFormCartao && modoFormCartao !== 'novo' && (
-        <FormNovoCartao
-          cartaoInicial={modoFormCartao}
-          onSalvar={(cartao) => { onEditarCartao(cartao); setModoFormCartao(null) }}
-          onCancelar={() => setModoFormCartao(null)}
-        />
+      {modoForm && modoForm !== 'novo' && (
+        <FormNovaConta contaInicial={modoForm} onSalvar={(c) => { onEditarConta(c); setModoForm(null) }} onCancelar={() => setModoForm(null)} />
       )}
 
-      {cartoes.length === 0 && !modoFormCartao && (
-        <p style={{ color: '#64748B', fontSize: 14 }}>
-          Nenhum cartão cadastrado. Toque em "+ Cartão" pra começar.
-        </p>
+      {contas.length === 0 && !modoForm && (
+        <p style={{ color: '#64748B', fontSize: 13 }}>Nenhuma conta cadastrada. Toque em "+ Conta" pra começar.</p>
       )}
 
-      {cartoes.map((cartao) => {
-        const faturaMes = cartao.faturas?.[chaveMesAtual] ?? null
-        const expandido = cartaoExpandido === cartao.id
-        const diasFechamento = diasAte(cartao.diaFechamento)
-        const diasVencimento = diasAte(cartao.diaVencimento)
-        const cores = corDoBanco(cartao.banco)
+      {contas.map((conta) => {
+        const info = infoTipoConta(conta.tipo)
+        const ehCredito = conta.tipo === 'credito'
+        const saldo = ehCredito ? null : saldoConta(conta)
+        const faturaMes = ehCredito ? (conta.faturas?.[chaveMesAtual] ?? null) : null
+        const expandida = contaExpandida === conta.id
+        const cores = corDoBanco(conta.banco || conta.nome)
+        const diasFech = ehCredito ? diasAte(conta.diaFechamento) : null
+        const diasVenc = ehCredito ? diasAte(conta.diaVencimento) : null
 
         return (
-          <div key={cartao.id} style={{ marginBottom: 16 }}>
-            <div
-              style={{
-                background: `linear-gradient(135deg, ${cores[0]}, ${cores[1]})`,
-                borderRadius: 16,
-                padding: 18,
-              }}
-            >
+          <div key={conta.id} style={{ marginBottom: 12 }}>
+            <div style={{
+              background: ehCredito
+                ? `linear-gradient(135deg, ${cores[0]}, ${cores[1]})`
+                : '#1E293B',
+              borderRadius: 14,
+              padding: 14,
+            }}>
               <button
-                onClick={() => setCartaoExpandido(expandido ? null : cartao.id)}
+                onClick={() => setContaExpandida(expandida ? null : conta.id)}
                 style={{ width: '100%', textAlign: 'left', background: 'transparent', border: 'none', padding: 0 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                  <p style={{ color: '#fff', fontSize: 16, fontWeight: 700 }}>{cartao.nome}</p>
-                  <div style={{ textAlign: 'right' }}>
-                    <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11 }}>Fecha dia {cartao.diaFechamento} · Vence dia {cartao.diaVencimento}</p>
-                  </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <p style={{ color: '#fff', fontSize: 14, fontWeight: 700 }}>
+                    {info.icone} {conta.nome}
+                  </p>
+                  {ehCredito && conta.diaVencimento && (
+                    <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>Vence dia {conta.diaVencimento}</p>
+                  )}
                 </div>
-                <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11, marginBottom: 4 }}>Fatura deste mês</p>
-                <p style={{ color: '#fff', fontSize: 26, fontWeight: 700 }}>
-                  {faturaMes !== null ? formatarMoeda(faturaMes) : '—'}
-                </p>
+                {ehCredito ? (
+                  <>
+                    <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>Fatura deste mês</p>
+                    <p style={{ color: '#fff', fontSize: 20, fontWeight: 700 }}>
+                      {faturaMes !== null ? formatarMoeda(faturaMes) : '—'}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p style={{ color: '#94A3B8', fontSize: 11 }}>Saldo (transações vinculadas)</p>
+                    <p style={{ color: saldo >= 0 ? '#22C55E' : '#EF4444', fontSize: 20, fontWeight: 700 }}>
+                      {formatarMoeda(saldo)}
+                    </p>
+                  </>
+                )}
               </button>
 
-              <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+              <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                {ehCredito && (
+                  <button
+                    onClick={() => { setEditandoFatura(conta.id); setValorFaturaInput(faturaMes !== null ? String(faturaMes) : '') }}
+                    style={{ flex: 1, padding: 8, borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.2)', color: '#fff', fontWeight: 600, fontSize: 12 }}
+                  >
+                    💳 Atualizar fatura
+                  </button>
+                )}
+                <button onClick={() => setModoForm(conta)} style={{ padding: 8, borderRadius: 8, border: 'none', background: ehCredito ? 'rgba(255,255,255,0.15)' : '#0F172A', color: '#fff', fontSize: 13 }}>✏️</button>
                 <button
-                  onClick={() => { setEditandoFatura(cartao.id); setValorFaturaInput(faturaMes !== null ? String(faturaMes) : '') }}
-                  style={{ flex: 1, padding: 10, borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.2)', color: '#fff', fontWeight: 600, fontSize: 13 }}
-                >
-                  💳 Atualizar fatura
-                </button>
-                <button
-                  onClick={() => setModoFormCartao(cartao)}
-                  style={{ padding: 10, borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.15)', color: '#fff', fontSize: 13 }}
-                >
-                  ✏️
-                </button>
-                <button
-                  onClick={() => { if (window.confirm(`Excluir o cartão "${cartao.nome}"?`)) onExcluirCartao(cartao.id) }}
-                  style={{ padding: 10, borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.15)', color: '#fff', fontSize: 13 }}
+                  onClick={() => { if (window.confirm(`Excluir "${conta.nome}"?`)) onExcluirConta(conta.id) }}
+                  style={{ padding: 8, borderRadius: 8, border: 'none', background: ehCredito ? 'rgba(255,255,255,0.15)' : '#0F172A', color: '#fff', fontSize: 13 }}
                 >
                   🗑️
                 </button>
               </div>
 
-              {editandoFatura === cartao.id && (
-                <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+              {editandoFatura === conta.id && (
+                <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
                   <input
                     autoFocus
                     type="number"
@@ -1102,925 +1140,60 @@ function Cartoes({ cartoes, onAdicionarCartao, onEditarCartao, onExcluirCartao }
                     placeholder="Valor total da fatura (R$)"
                     value={valorFaturaInput}
                     onChange={(e) => setValorFaturaInput(e.target.value)}
-                    style={{
-                      flex: 1,
-                      padding: '10px 12px',
-                      borderRadius: 10,
-                      border: 'none',
-                      background: 'rgba(255,255,255,0.15)',
-                      color: '#fff',
-                      fontSize: 14,
-                    }}
+                    style={{ flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.15)', color: '#fff', fontSize: 14 }}
                   />
-                  <button
-                    onClick={() => handleSalvarFatura(cartao)}
-                    style={{ background: '#fff', border: 'none', color: cores[0], borderRadius: 10, padding: '0 16px', fontWeight: 700 }}
-                  >
-                    OK
-                  </button>
-                  <button
-                    onClick={() => setEditandoFatura(null)}
-                    style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: 10, padding: '0 12px' }}
-                  >
-                    ✕
-                  </button>
+                  <button onClick={() => handleSalvarFatura(conta)} style={{ background: '#fff', border: 'none', color: cores[0], borderRadius: 10, padding: '0 14px', fontWeight: 700 }}>OK</button>
+                  <button onClick={() => setEditandoFatura(null)} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: 10, padding: '0 10px' }}>✕</button>
                 </div>
               )}
             </div>
 
-            {expandido && (
-              <div style={{ background: '#1E293B', borderRadius: 14, padding: 16, marginTop: 8 }}>
-                <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 12 }}>Próximos eventos</p>
-                <div style={{ display: 'flex', gap: 12 }}>
-                  <div style={{ flex: 1, background: '#0F172A', borderRadius: 10, padding: 12 }}>
-                    <p style={{ color: '#94A3B8', fontSize: 11 }}>Fechamento</p>
-                    <p style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>Dia {cartao.diaFechamento}</p>
-                    <p style={{ color: diasFechamento <= 3 ? '#EF4444' : '#64748B', fontSize: 12 }}>
-                      em {diasFechamento} {diasFechamento === 1 ? 'dia' : 'dias'}
-                    </p>
+            {expandida && ehCredito && (
+              <div style={{ background: '#1E293B', borderRadius: 12, padding: 14, marginTop: 6 }}>
+                <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+                  <div style={{ flex: 1, background: '#0F172A', borderRadius: 10, padding: 10 }}>
+                    <p style={{ color: '#94A3B8', fontSize: 10 }}>Fechamento</p>
+                    <p style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>Dia {conta.diaFechamento}</p>
+                    <p style={{ color: diasFech <= 3 ? '#EF4444' : '#64748B', fontSize: 11 }}>em {diasFech} {diasFech === 1 ? 'dia' : 'dias'}</p>
                   </div>
-                  <div style={{ flex: 1, background: '#0F172A', borderRadius: 10, padding: 12 }}>
-                    <p style={{ color: '#94A3B8', fontSize: 11 }}>Vencimento</p>
-                    <p style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>Dia {cartao.diaVencimento}</p>
-                    <p style={{ color: diasVencimento <= 5 ? '#F59E0B' : '#64748B', fontSize: 12 }}>
-                      em {diasVencimento} {diasVencimento === 1 ? 'dia' : 'dias'}
-                    </p>
+                  <div style={{ flex: 1, background: '#0F172A', borderRadius: 10, padding: 10 }}>
+                    <p style={{ color: '#94A3B8', fontSize: 10 }}>Vencimento</p>
+                    <p style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>Dia {conta.diaVencimento}</p>
+                    <p style={{ color: diasVenc <= 5 ? '#F59E0B' : '#64748B', fontSize: 11 }}>em {diasVenc} {diasVenc === 1 ? 'dia' : 'dias'}</p>
                   </div>
                 </div>
+                <p style={{ color: '#94A3B8', fontSize: 12, marginBottom: 8 }}>Histórico</p>
+                {Object.entries(conta.faturas || {}).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 6).map(([chave, valor]) => {
+                  const [ano, mes] = chave.split('-')
+                  return (
+                    <div key={chave} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #334155' }}>
+                      <p style={{ color: '#94A3B8', fontSize: 12 }}>{NOMES_MESES[Number(mes) - 1]} {ano}{chave === chaveMesAtual ? ' • atual' : ''}</p>
+                      <p style={{ color: '#fff', fontSize: 12, fontWeight: 600 }}>{formatarMoeda(valor)}</p>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
 
-                <p style={{ color: '#94A3B8', fontSize: 13, marginTop: 16, marginBottom: 8 }}>Histórico de faturas</p>
-                {Object.keys(cartao.faturas || {}).length === 0 && (
-                  <p style={{ color: '#64748B', fontSize: 13 }}>Nenhuma fatura registrada ainda.</p>
+            {expandida && !ehCredito && (
+              <div style={{ background: '#1E293B', borderRadius: 12, padding: 14, marginTop: 6 }}>
+                <p style={{ color: '#94A3B8', fontSize: 12, marginBottom: 8 }}>Últimas movimentações</p>
+                {transacoes.filter((t) => t.contaId === conta.id).length === 0 && (
+                  <p style={{ color: '#64748B', fontSize: 12 }}>Nenhuma transação vinculada ainda.</p>
                 )}
-                {Object.entries(cartao.faturas || {})
-                  .sort((a, b) => b[0].localeCompare(a[0]))
-                  .slice(0, 6)
-                  .map(([chave, valor]) => {
-                    const [ano, mes] = chave.split('-')
-                    return (
-                      <div key={chave} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #334155' }}>
-                        <p style={{ color: '#94A3B8', fontSize: 13 }}>
-                          {NOMES_MESES[Number(mes) - 1]} {ano}
-                          {chave === chaveMesAtual && <span style={{ color: '#6366F1', fontSize: 11 }}> • atual</span>}
-                        </p>
-                        <p style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>{formatarMoeda(valor)}</p>
-                      </div>
-                    )
-                  })}
+                {[...transacoes.filter((t) => t.contaId === conta.id)]
+                  .sort((a, b) => new Date(b.data) - new Date(a.data))
+                  .slice(0, 8)
+                  .map((t) => (
+                    <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #334155' }}>
+                      <p style={{ color: '#fff', fontSize: 12 }}>{t.descricao}</p>
+                      <p style={{ color: t.tipo === 'receita' ? '#22C55E' : '#EF4444', fontSize: 12, fontWeight: 600 }}>
+                        {t.tipo === 'receita' ? '+' : '-'}{formatarMoeda(t.valor)}
+                      </p>
+                    </div>
+                  ))}
               </div>
             )}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-// ---------- Componente: Metas ----------
-
-function Metas({ metas, onAdicionarMeta, onEditarMeta, onExcluirMeta, onContribuir, reserva, transacoes, onSalvarConfigReserva, onContribuirReserva }) {
-  const [modoForm, setModoForm] = useState(null) // null | 'novo' | metaObjeto
-  const [depositoAberto, setDepositoAberto] = useState(null) // id da meta com input de depósito aberto
-  const [valorDeposito, setValorDeposito] = useState('')
-
-  function confirmarDeposito(meta) {
-    const valor = Number(valorDeposito)
-    if (!valor || valor <= 0) {
-      alert('Digite um valor válido pra depositar.')
-      return
-    }
-    onContribuir(meta.id, valor)
-    setDepositoAberto(null)
-    setValorDeposito('')
-  }
-
-  return (
-    <div style={{ padding: 16, background: '#0F172A', minHeight: '100vh' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <h1 style={{ fontSize: 20, color: '#fff' }}>Metas</h1>
-        {!modoForm && (
-          <button
-            onClick={() => setModoForm('novo')}
-            style={{ background: '#6366F1', border: 'none', color: '#fff', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600 }}
-          >
-            + Meta
-          </button>
-        )}
-      </div>
-
-      <ReservaEmergencia
-        reserva={reserva}
-        transacoes={transacoes}
-        onSalvarConfig={onSalvarConfigReserva}
-        onContribuir={onContribuirReserva}
-      />
-
-      {modoForm === 'novo' && (
-        <FormNovaMeta
-          onSalvar={(meta) => {
-            onAdicionarMeta(meta)
-            setModoForm(null)
-          }}
-          onCancelar={() => setModoForm(null)}
-        />
-      )}
-
-      {modoForm && modoForm !== 'novo' && (
-        <FormNovaMeta
-          metaInicial={modoForm}
-          onSalvar={(meta) => {
-            onEditarMeta(meta)
-            setModoForm(null)
-          }}
-          onCancelar={() => setModoForm(null)}
-        />
-      )}
-
-      {metas.length === 0 && !modoForm && (
-        <p style={{ color: '#64748B', fontSize: 14 }}>
-          Nenhuma meta cadastrada ainda. Toque em "+ Meta" pra começar a guardar dinheiro pra algo importante.
-        </p>
-      )}
-
-      {metas.map((meta) => {
-        const percentual = meta.valorAlvo > 0 ? Math.min((meta.valorAtual / meta.valorAlvo) * 100, 100) : 0
-        const completa = meta.valorAtual >= meta.valorAlvo
-        const faltam = Math.max(meta.valorAlvo - meta.valorAtual, 0)
-
-        return (
-          <div key={meta.id} style={{ background: '#1E293B', borderRadius: 14, padding: 16, marginBottom: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <p style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>
-                {meta.icone} {meta.nome} {completa && '✅'}
-              </p>
-              <div style={{ display: 'flex', gap: 2 }}>
-                <button
-                  onClick={() => setModoForm(meta)}
-                  aria-label="Editar meta"
-                  style={{ background: 'transparent', border: 'none', fontSize: 14, padding: 6, cursor: 'pointer' }}
-                >
-                  ✏️
-                </button>
-                <button
-                  onClick={() => {
-                    if (window.confirm(`Excluir a meta "${meta.nome}"?`)) onExcluirMeta(meta.id)
-                  }}
-                  aria-label="Excluir meta"
-                  style={{ background: 'transparent', border: 'none', fontSize: 14, padding: 6, cursor: 'pointer' }}
-                >
-                  🗑️
-                </button>
-              </div>
-            </div>
-
-            <div style={{ background: '#0F172A', borderRadius: 8, height: 10, marginBottom: 8 }}>
-              <div
-                style={{
-                  width: `${percentual}%`,
-                  background: completa ? '#22C55E' : '#6366F1',
-                  height: 10,
-                  borderRadius: 8,
-                }}
-              />
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-              <p style={{ color: '#94A3B8', fontSize: 12 }}>
-                {formatarMoeda(meta.valorAtual)} de {formatarMoeda(meta.valorAlvo)}
-              </p>
-              <p style={{ color: '#94A3B8', fontSize: 12 }}>{Math.round(percentual)}%</p>
-            </div>
-
-            {!completa && faltam > 0 && (
-              <p style={{ color: '#64748B', fontSize: 12, marginBottom: 10 }}>
-                Faltam {formatarMoeda(faltam)}
-              </p>
-            )}
-
-            {depositoAberto === meta.id ? (
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input
-                  autoFocus
-                  type="number"
-                  inputMode="decimal"
-                  placeholder="Valor a depositar"
-                  value={valorDeposito}
-                  onChange={(e) => setValorDeposito(e.target.value)}
-                  style={{
-                    flex: 1,
-                    padding: '10px 12px',
-                    borderRadius: 10,
-                    border: '1px solid #334155',
-                    background: '#0F172A',
-                    color: '#fff',
-                    fontSize: 14,
-                  }}
-                />
-                <button
-                  onClick={() => confirmarDeposito(meta)}
-                  style={{ background: '#22C55E', border: 'none', color: '#fff', borderRadius: 10, padding: '0 16px', fontWeight: 600 }}
-                >
-                  OK
-                </button>
-                <button
-                  onClick={() => {
-                    setDepositoAberto(null)
-                    setValorDeposito('')
-                  }}
-                  style={{ background: '#334155', border: 'none', color: '#fff', borderRadius: 10, padding: '0 12px' }}
-                >
-                  ✕
-                </button>
-              </div>
-            ) : (
-              !completa && (
-                <button
-                  onClick={() => setDepositoAberto(meta.id)}
-                  style={{
-                    width: '100%',
-                    padding: 10,
-                    borderRadius: 10,
-                    border: '1px dashed #22C55E',
-                    background: 'transparent',
-                    color: '#22C55E',
-                    fontWeight: 600,
-                  }}
-                >
-                  💰 Depositar
-                </button>
-              )
-            )}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-// ---------- Componente: Formulário Reserva de Emergência ----------
-
-function FormReserva({ onSalvar, onCancelar, reservaInicial, despesaMediaMensal }) {
-  const [valorAtual, setValorAtual] = useState(reservaInicial ? String(reservaInicial.valorAtual) : '0')
-  const [mesesDesejados, setMesesDesejados] = useState(reservaInicial ? String(reservaInicial.mesesDesejados) : '6')
-  const [aporteMensalPlanejado, setAporteMensalPlanejado] = useState(
-    reservaInicial ? String(reservaInicial.aporteMensalPlanejado) : ''
-  )
-
-  const inputStyle = {
-    width: '100%',
-    padding: '12px 14px',
-    borderRadius: 10,
-    border: '1px solid #334155',
-    background: '#0F172A',
-    color: '#fff',
-    fontSize: 15,
-    marginBottom: 14,
-    boxSizing: 'border-box',
-  }
-
-  function handleSalvar() {
-    if (!mesesDesejados || Number(mesesDesejados) <= 0) {
-      alert('Diga quantos meses de despesas você quer ter guardado.')
-      return
-    }
-    onSalvar({
-      valorAtual: Number(valorAtual) || 0,
-      mesesDesejados: Number(mesesDesejados),
-      aporteMensalPlanejado: Number(aporteMensalPlanejado) || 0,
-    })
-  }
-
-  return (
-    <div style={{ background: '#1E293B', borderRadius: 14, padding: 16, marginBottom: 16 }}>
-      <p style={{ color: '#fff', fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
-        🛡️ Configurar reserva de emergência
-      </p>
-      <p style={{ color: '#64748B', fontSize: 12, marginBottom: 12 }}>
-        Sua média de despesas nos últimos meses é {formatarMoeda(despesaMediaMensal)}.
-      </p>
-
-      <label style={{ color: '#94A3B8', fontSize: 13 }}>Quantos meses de despesas você quer guardar?</label>
-      <input
-        style={inputStyle}
-        type="number"
-        inputMode="numeric"
-        placeholder="Ex: 6"
-        value={mesesDesejados}
-        onChange={(e) => setMesesDesejados(e.target.value)}
-      />
-
-      <label style={{ color: '#94A3B8', fontSize: 13 }}>Já guardado até agora (R$)</label>
-      <input
-        style={inputStyle}
-        type="number"
-        inputMode="decimal"
-        placeholder="0,00"
-        value={valorAtual}
-        onChange={(e) => setValorAtual(e.target.value)}
-      />
-
-      <label style={{ color: '#94A3B8', fontSize: 13 }}>Quanto pretende guardar por mês? (opcional)</label>
-      <input
-        style={inputStyle}
-        type="number"
-        inputMode="decimal"
-        placeholder="0,00"
-        value={aporteMensalPlanejado}
-        onChange={(e) => setAporteMensalPlanejado(e.target.value)}
-      />
-
-      <div style={{ display: 'flex', gap: 10 }}>
-        <button
-          onClick={onCancelar}
-          style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#334155', color: '#fff', fontWeight: 600 }}
-        >
-          Cancelar
-        </button>
-        <button
-          onClick={handleSalvar}
-          style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
-        >
-          Salvar
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ---------- Componente: Reserva de Emergência ----------
-
-function ReservaEmergencia({ reserva, transacoes, onSalvarConfig, onContribuir }) {
-  const [editando, setEditando] = useState(false)
-  const [depositoAberto, setDepositoAberto] = useState(false)
-  const [valorDeposito, setValorDeposito] = useState('')
-
-  const despesaMediaMensal = calcularMediaDespesasMensais(transacoes)
-
-  if (!reserva || editando) {
-    return (
-      <div style={{ marginBottom: 20 }}>
-        <FormReserva
-          reservaInicial={reserva}
-          despesaMediaMensal={despesaMediaMensal}
-          onSalvar={(config) => {
-            onSalvarConfig(config)
-            setEditando(false)
-          }}
-          onCancelar={() => setEditando(false)}
-        />
-      </div>
-    )
-  }
-
-  const valorAlvo = despesaMediaMensal * reserva.mesesDesejados
-  const percentual = valorAlvo > 0 ? Math.min((reserva.valorAtual / valorAlvo) * 100, 100) : 0
-  const completa = reserva.valorAtual >= valorAlvo
-  const faltam = Math.max(valorAlvo - reserva.valorAtual, 0)
-  const tempoEstimadoMeses =
-    reserva.aporteMensalPlanejado > 0 ? Math.ceil(faltam / reserva.aporteMensalPlanejado) : null
-
-  function confirmarDeposito() {
-    const valor = Number(valorDeposito)
-    if (!valor || valor <= 0) {
-      alert('Digite um valor válido pra depositar.')
-      return
-    }
-    onContribuir(valor)
-    setDepositoAberto(false)
-    setValorDeposito('')
-  }
-
-  return (
-    <div
-      style={{
-        background: 'linear-gradient(135deg, #0F766E, #0D9488)',
-        borderRadius: 16,
-        padding: 18,
-        marginBottom: 20,
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <p style={{ color: '#fff', fontSize: 15, fontWeight: 700 }}>
-          🛡️ Reserva de emergência {completa && '✅'}
-        </p>
-        <button
-          onClick={() => setEditando(true)}
-          aria-label="Configurar reserva"
-          style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: 6, padding: '4px 8px', fontSize: 13 }}
-        >
-          ⚙️
-        </button>
-      </div>
-
-      <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 8, height: 10, marginBottom: 8 }}>
-        <div
-          style={{
-            width: `${percentual}%`,
-            background: completa ? '#22C55E' : '#fff',
-            height: 10,
-            borderRadius: 8,
-          }}
-        />
-      </div>
-
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-        <p style={{ color: '#CCFBF1', fontSize: 12 }}>
-          {formatarMoeda(reserva.valorAtual)} de {formatarMoeda(valorAlvo)}
-        </p>
-        <p style={{ color: '#CCFBF1', fontSize: 12 }}>{Math.round(percentual)}%</p>
-      </div>
-
-      <p style={{ color: '#CCFBF1', fontSize: 12, marginBottom: 4 }}>
-        Meta: {reserva.mesesDesejados} meses de despesas ({formatarMoeda(despesaMediaMensal)}/mês)
-      </p>
-
-      {!completa && (
-        <p style={{ color: '#CCFBF1', fontSize: 12, marginBottom: 10 }}>
-          Faltam {formatarMoeda(faltam)}
-          {tempoEstimadoMeses !== null &&
-            ` · no ritmo atual, ~${tempoEstimadoMeses} ${tempoEstimadoMeses === 1 ? 'mês' : 'meses'}`}
-        </p>
-      )}
-
-      {depositoAberto ? (
-        <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-          <input
-            autoFocus
-            type="number"
-            inputMode="decimal"
-            placeholder="Valor a depositar"
-            value={valorDeposito}
-            onChange={(e) => setValorDeposito(e.target.value)}
-            style={{
-              flex: 1,
-              padding: '10px 12px',
-              borderRadius: 10,
-              border: 'none',
-              background: 'rgba(255,255,255,0.15)',
-              color: '#fff',
-              fontSize: 14,
-            }}
-          />
-          <button
-            onClick={confirmarDeposito}
-            style={{ background: '#fff', border: 'none', color: '#0D9488', borderRadius: 10, padding: '0 16px', fontWeight: 700 }}
-          >
-            OK
-          </button>
-          <button
-            onClick={() => {
-              setDepositoAberto(false)
-              setValorDeposito('')
-            }}
-            style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: 10, padding: '0 12px' }}
-          >
-            ✕
-          </button>
-        </div>
-      ) : (
-        !completa && (
-          <button
-            onClick={() => setDepositoAberto(true)}
-            style={{
-              width: '100%',
-              padding: 10,
-              borderRadius: 10,
-              border: '1px dashed rgba(255,255,255,0.5)',
-              background: 'transparent',
-              color: '#fff',
-              fontWeight: 600,
-            }}
-          >
-            💰 Depositar
-          </button>
-        )
-      )}
-    </div>
-  )
-}
-
-// ---------- Componente: Formulário Item Anual ----------
-
-function FormItemAnual({ onSalvar, onCancelar, itemInicial }) {
-  const [nome, setNome] = useState(itemInicial?.nome || '')
-  const [valorEstimado, setValorEstimado] = useState(itemInicial ? String(itemInicial.valorEstimado) : '')
-  const [mes, setMes] = useState(itemInicial ? String(itemInicial.mes) : '1')
-
-  const emEdicao = Boolean(itemInicial)
-
-  const inputStyle = {
-    width: '100%',
-    padding: '12px 14px',
-    borderRadius: 10,
-    border: '1px solid #334155',
-    background: '#0F172A',
-    color: '#fff',
-    fontSize: 15,
-    marginBottom: 14,
-    boxSizing: 'border-box',
-  }
-
-  function handleSalvar() {
-    if (!nome.trim() || !valorEstimado || Number(valorEstimado) <= 0) {
-      alert('Preencha o nome e o valor estimado.')
-      return
-    }
-    onSalvar({
-      id: emEdicao ? itemInicial.id : Date.now(),
-      nome: nome.trim(),
-      valorEstimado: Number(valorEstimado),
-      mes: Number(mes),
-    })
-  }
-
-  return (
-    <div style={{ background: '#1E293B', borderRadius: 14, padding: 16, marginBottom: 16 }}>
-      <p style={{ color: '#fff', fontSize: 15, fontWeight: 600, marginBottom: 12 }}>
-        {emEdicao ? 'Editar item anual' : 'Novo item anual'}
-      </p>
-      <label style={{ color: '#94A3B8', fontSize: 13 }}>Nome</label>
-      <input
-        style={inputStyle}
-        placeholder="Ex: IPTU, 13º salário, Material escolar..."
-        value={nome}
-        onChange={(e) => setNome(e.target.value)}
-      />
-      <label style={{ color: '#94A3B8', fontSize: 13 }}>Valor estimado (R$)</label>
-      <input
-        style={inputStyle}
-        type="number"
-        inputMode="decimal"
-        placeholder="0,00"
-        value={valorEstimado}
-        onChange={(e) => setValorEstimado(e.target.value)}
-      />
-      <label style={{ color: '#94A3B8', fontSize: 13 }}>Mês previsto</label>
-      <select style={inputStyle} value={mes} onChange={(e) => setMes(e.target.value)}>
-        {NOMES_MESES.map((nomeMes, i) => (
-          <option key={i} value={i + 1}>
-            {nomeMes}
-          </option>
-        ))}
-      </select>
-      <div style={{ display: 'flex', gap: 10 }}>
-        <button
-          onClick={onCancelar}
-          style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#334155', color: '#fff', fontWeight: 600 }}
-        >
-          Cancelar
-        </button>
-        <button
-          onClick={handleSalvar}
-          style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
-        >
-          {emEdicao ? 'Salvar alterações' : 'Salvar'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ---------- Componente: Planejamento (mensal e anual) ----------
-
-function Planejamento({
-  transacoes,
-  planejamentos,
-  itensAnuais,
-  onSalvarPlanejamentoMes,
-  onAdicionarItemAnual,
-  onEditarItemAnual,
-  onExcluirItemAnual,
-  onVoltar,
-}) {
-  const chave = mesAtual()
-  const planoAtual = planejamentos[chave] || { receitaPrevista: 0, despesaPrevista: 0 }
-  const [receitaPrevista, setReceitaPrevista] = useState(
-    planoAtual.receitaPrevista ? String(planoAtual.receitaPrevista) : ''
-  )
-  const [despesaPrevista, setDespesaPrevista] = useState(
-    planoAtual.despesaPrevista ? String(planoAtual.despesaPrevista) : ''
-  )
-  const [modoFormItem, setModoFormItem] = useState(null) // null | 'novo' | item
-
-  const inputStyle = {
-    width: '100%',
-    padding: '12px 14px',
-    borderRadius: 10,
-    border: '1px solid #334155',
-    background: '#0F172A',
-    color: '#fff',
-    fontSize: 15,
-    marginBottom: 14,
-    boxSizing: 'border-box',
-  }
-
-  const doMes = transacoes.filter((t) => t.data.startsWith(chave))
-  const receitaReal = doMes.filter((t) => t.tipo === 'receita').reduce((s, t) => s + t.valor, 0)
-  const despesaReal = doMes.filter((t) => t.tipo === 'despesa').reduce((s, t) => s + t.valor, 0)
-
-  const receitaPrevNum = Number(receitaPrevista) || 0
-  const despesaPrevNum = Number(despesaPrevista) || 0
-  const saldoEsperado = receitaPrevNum - despesaPrevNum
-
-  function handleSalvarPlano() {
-    onSalvarPlanejamentoMes(chave, { receitaPrevista: receitaPrevNum, despesaPrevista: despesaPrevNum })
-  }
-
-  const hoje = new Date()
-  const mesAtualNum = hoje.getMonth() + 1
-  const itensOrdenados = [...itensAnuais].sort((a, b) => a.mes - b.mes)
-
-  return (
-    <div style={{ padding: 16, background: '#0F172A', minHeight: '100vh' }}>
-      <button
-        onClick={onVoltar}
-        style={{ background: 'transparent', border: 'none', color: '#94A3B8', fontSize: 14, marginBottom: 12, padding: 0 }}
-      >
-        ‹ Voltar
-      </button>
-      <h1 style={{ fontSize: 20, color: '#fff', marginBottom: 20 }}>Planejamento</h1>
-
-      <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 8 }}>
-        Planejamento de {NOMES_MESES[mesAtualNum - 1]}
-      </p>
-      <div style={{ background: '#1E293B', borderRadius: 14, padding: 16, marginBottom: 24 }}>
-        <label style={{ color: '#94A3B8', fontSize: 13 }}>Receita prevista</label>
-        <input
-          style={inputStyle}
-          type="number"
-          inputMode="decimal"
-          placeholder="0,00"
-          value={receitaPrevista}
-          onChange={(e) => setReceitaPrevista(e.target.value)}
-        />
-        <label style={{ color: '#94A3B8', fontSize: 13 }}>Despesa prevista</label>
-        <input
-          style={inputStyle}
-          type="number"
-          inputMode="decimal"
-          placeholder="0,00"
-          value={despesaPrevista}
-          onChange={(e) => setDespesaPrevista(e.target.value)}
-        />
-        <button
-          onClick={handleSalvarPlano}
-          style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700, marginBottom: 16 }}
-        >
-          Salvar plano do mês
-        </button>
-
-        <div style={{ borderTop: '1px solid #334155', paddingTop: 12 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-            <p style={{ color: '#94A3B8', fontSize: 13 }}>Saldo esperado</p>
-            <p style={{ color: saldoEsperado >= 0 ? '#22C55E' : '#EF4444', fontSize: 13, fontWeight: 600 }}>
-              {formatarMoeda(saldoEsperado)}
-            </p>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-            <p style={{ color: '#94A3B8', fontSize: 13 }}>Receita real até agora</p>
-            <p style={{ color: '#22C55E', fontSize: 13 }}>{formatarMoeda(receitaReal)}</p>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <p style={{ color: '#94A3B8', fontSize: 13 }}>Despesa real até agora</p>
-            <p style={{ color: '#EF4444', fontSize: 13 }}>{formatarMoeda(despesaReal)}</p>
-          </div>
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <p style={{ color: '#94A3B8', fontSize: 13 }}>Visão anual (13º, IPTU, férias...)</p>
-        {!modoFormItem && (
-          <button
-            onClick={() => setModoFormItem('novo')}
-            style={{ background: '#6366F1', border: 'none', color: '#fff', borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 600 }}
-          >
-            + Item
-          </button>
-        )}
-      </div>
-
-      {modoFormItem === 'novo' && (
-        <FormItemAnual
-          onSalvar={(item) => {
-            onAdicionarItemAnual(item)
-            setModoFormItem(null)
-          }}
-          onCancelar={() => setModoFormItem(null)}
-        />
-      )}
-      {modoFormItem && modoFormItem !== 'novo' && (
-        <FormItemAnual
-          itemInicial={modoFormItem}
-          onSalvar={(item) => {
-            onEditarItemAnual(item)
-            setModoFormItem(null)
-          }}
-          onCancelar={() => setModoFormItem(null)}
-        />
-      )}
-
-      {itensOrdenados.length === 0 && !modoFormItem && (
-        <p style={{ color: '#64748B', fontSize: 14 }}>
-          Nenhum item anual cadastrado. Adicione coisas como IPTU, IPVA, 13º ou material escolar.
-        </p>
-      )}
-
-      {itensOrdenados.map((item) => {
-        const proximo = item.mes === mesAtualNum || item.mes === (mesAtualNum % 12) + 1
-        return (
-          <div
-            key={item.id}
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              background: proximo ? '#1E293B' : 'transparent',
-              border: proximo ? '1px solid #6366F1' : '1px solid #1E293B',
-              borderRadius: 12,
-              padding: '12px 14px',
-              marginBottom: 8,
-            }}
-          >
-            <div>
-              <p style={{ color: '#fff', fontSize: 14 }}>
-                {item.nome} {proximo && <span style={{ color: '#6366F1', fontSize: 11 }}>chegando</span>}
-              </p>
-              <p style={{ color: '#64748B', fontSize: 12 }}>{NOMES_MESES[item.mes - 1]}</p>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <p style={{ color: '#F59E0B', fontSize: 14, fontWeight: 600 }}>{formatarMoeda(item.valorEstimado)}</p>
-              <button
-                onClick={() => setModoFormItem(item)}
-                aria-label="Editar item"
-                style={{ background: 'transparent', border: 'none', fontSize: 14, padding: 6, cursor: 'pointer' }}
-              >
-                ✏️
-              </button>
-              <button
-                onClick={() => {
-                  if (window.confirm(`Excluir "${item.nome}"?`)) onExcluirItemAnual(item.id)
-                }}
-                aria-label="Excluir item"
-                style={{ background: 'transparent', border: 'none', fontSize: 14, padding: 6, cursor: 'pointer' }}
-              >
-                🗑️
-              </button>
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-// ---------- Componente: Relatórios ----------
-
-function Relatorios({ transacoes, onVoltar }) {
-  const resumo = calcularResumoMensal(transacoes, 6)
-  const maxValor = Math.max(...resumo.flatMap((m) => [m.receitas, m.despesas]), 1)
-
-  const chaveMesAtual = mesAtual()
-  const doMesAtual = transacoes.filter((t) => t.data.startsWith(chaveMesAtual) && t.tipo === 'despesa')
-  const porCategoria = {}
-  doMesAtual.forEach((t) => {
-    porCategoria[t.categoria] = (porCategoria[t.categoria] || 0) + t.valor
-  })
-  const totalDespesasMes = Object.values(porCategoria).reduce((s, v) => s + v, 0)
-  const categoriasOrdenadas = Object.entries(porCategoria).sort((a, b) => b[1] - a[1])
-  const maiorCategoria = categoriasOrdenadas[0]
-
-  const mesesComDados = resumo.filter((m) => m.receitas > 0 || m.despesas > 0)
-  const economiaMedia =
-    mesesComDados.length > 0
-      ? mesesComDados.reduce((s, m) => s + m.saldo, 0) / mesesComDados.length
-      : 0
-
-  function nomeMesAbreviado(chave) {
-    const [, mes] = chave.split('-')
-    return NOMES_MESES[Number(mes) - 1].slice(0, 3)
-  }
-
-  return (
-    <div style={{ padding: '4px 20px 20px' }}>
-      <div
-        style={{
-          background: economiaMedia >= 0 ? '#1E293B' : '#1E293B',
-          borderRadius: 14,
-          padding: 16,
-          marginBottom: 20,
-        }}
-      >
-        <p style={{ color: '#94A3B8', fontSize: 12, marginBottom: 4 }}>
-          Você economiza em média, por mês
-        </p>
-        <p style={{ color: economiaMedia >= 0 ? '#22C55E' : '#EF4444', fontSize: 22, fontWeight: 700 }}>
-          {formatarMoeda(economiaMedia)}
-        </p>
-      </div>
-
-      {maiorCategoria && (
-        <div style={{ background: '#1E293B', borderRadius: 14, padding: 16, marginBottom: 20 }}>
-          <p style={{ color: '#94A3B8', fontSize: 12, marginBottom: 4 }}>Onde você mais gasta este mês</p>
-          <p style={{ color: '#fff', fontSize: 16, fontWeight: 600 }}>
-            {infoCategoria('despesa', maiorCategoria[0]).icone} {infoCategoria('despesa', maiorCategoria[0]).label}
-          </p>
-          <p style={{ color: '#F59E0B', fontSize: 13 }}>
-            {formatarMoeda(maiorCategoria[1])} ·{' '}
-            {totalDespesasMes > 0 ? Math.round((maiorCategoria[1] / totalDespesasMes) * 100) : 0}% dos gastos
-          </p>
-        </div>
-      )}
-
-      <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 12 }}>
-        Receitas x Despesas — últimos 6 meses
-      </p>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-end',
-          gap: 10,
-          height: 140,
-          marginBottom: 8,
-          background: '#1E293B',
-          borderRadius: 14,
-          padding: '16px 12px 8px',
-        }}
-      >
-        {resumo.map((m) => (
-          <div key={m.chave} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%' }}>
-            <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: 3 }}>
-              <div
-                title="Receitas"
-                style={{
-                  width: 10,
-                  height: `${(m.receitas / maxValor) * 100}%`,
-                  minHeight: m.receitas > 0 ? 2 : 0,
-                  background: '#22C55E',
-                  borderRadius: 3,
-                }}
-              />
-              <div
-                title="Despesas"
-                style={{
-                  width: 10,
-                  height: `${(m.despesas / maxValor) * 100}%`,
-                  minHeight: m.despesas > 0 ? 2 : 0,
-                  background: '#EF4444',
-                  borderRadius: 3,
-                }}
-              />
-            </div>
-            <p style={{ color: '#64748B', fontSize: 10, marginTop: 6 }}>{nomeMesAbreviado(m.chave)}</p>
-          </div>
-        ))}
-      </div>
-      <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ width: 8, height: 8, borderRadius: 8, background: '#22C55E' }} />
-          <span style={{ color: '#64748B', fontSize: 11 }}>Receitas</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ width: 8, height: 8, borderRadius: 8, background: '#EF4444' }} />
-          <span style={{ color: '#64748B', fontSize: 11 }}>Despesas</span>
-        </div>
-      </div>
-
-      <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 12 }}>
-        Evolução do saldo total — últimos 6 meses
-      </p>
-      <div style={{ background: '#1E293B', borderRadius: 14, padding: 16, marginBottom: 20 }}>
-        {resumo.map((m) => (
-          <div key={m.chave} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-            <p style={{ color: '#94A3B8', fontSize: 12 }}>{nomeMesAbreviado(m.chave)}</p>
-            <p style={{ color: m.acumulado >= 0 ? '#22C55E' : '#EF4444', fontSize: 12, fontWeight: 600 }}>
-              {formatarMoeda(m.acumulado)}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 12 }}>
-        Gastos por categoria — este mês
-      </p>
-      {categoriasOrdenadas.length === 0 && (
-        <p style={{ color: '#64748B', fontSize: 14 }}>Nenhuma despesa registrada este mês ainda.</p>
-      )}
-      {categoriasOrdenadas.map(([catId, valor]) => {
-        const cat = infoCategoria('despesa', catId)
-        const percentual = totalDespesasMes > 0 ? (valor / totalDespesasMes) * 100 : 0
-        return (
-          <div key={catId} style={{ marginBottom: 10 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-              <span style={{ color: '#fff', fontSize: 13 }}>
-                {cat.icone} {cat.label}
-              </span>
-              <span style={{ color: '#94A3B8', fontSize: 13 }}>
-                {formatarMoeda(valor)} · {Math.round(percentual)}%
-              </span>
-            </div>
-            <div style={{ background: '#1E293B', borderRadius: 6, height: 6 }}>
-              <div style={{ width: `${percentual}%`, background: '#6366F1', height: 6, borderRadius: 6 }} />
-            </div>
           </div>
         )
       })}
@@ -2237,7 +1410,7 @@ function Filhos({ filhos, transacoes, onAdicionarFilho, onEditarFilho, onExcluir
 
 // ---------- Componente: Assistente IA ----------
 
-function Assistente({ transacoes, metas, reserva, cartoes, onVoltar }) {
+function Assistente({ transacoes, metas, reserva, contas, onVoltar }) {
   const [pergunta, setPergunta] = useState('')
   const [historico, setHistorico] = useState([])
   const [carregando, setCarregando] = useState(false)
@@ -2257,7 +1430,7 @@ function Assistente({ transacoes, metas, reserva, cartoes, onVoltar }) {
     setErro(null)
 
     try {
-      const contexto = construirContextoIA(transacoes, metas, reserva, cartoes)
+      const contexto = construirContextoIA(transacoes, metas, reserva, contas)
       const resposta = await fetch('/api/assistente', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2819,7 +1992,7 @@ function Inicio({
   onExcluir,
   nome,
   preferencias,
-  cartoes,
+  contas,
   onAbrirFilhos,
   onAbrirPlanejamento,
   onAbrirConfiguracoes,
@@ -2842,7 +2015,7 @@ function Inicio({
   ).filter((t) => t.tipo === 'despesa' && t.data >= hojeStr && t.data <= emSeteDiasStr)
 
   // Cartões com fechamento OU vencimento nos próximos 5 dias
-  const cartoesFechandoEm5Dias = (cartoes || []).filter((c) => {
+  const cartoesFechandoEm5Dias = (contas || []).filter((c) => {
     const diaHoje = hoje.getDate()
     const diffFechamento = c.diaFechamento >= diaHoje
       ? c.diaFechamento - diaHoje
@@ -2861,7 +2034,11 @@ function Inicio({
 
   return (
     <div>
-      <div style={{ padding: '16px 16px 0', background: '#0F172A' }}>
+      <div style={{
+        padding: '16px 14px 0',
+        paddingTop: 'calc(env(safe-area-inset-top, 44px) + 10px)',
+        background: '#0F172A',
+      }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <p style={{ color: '#fff', fontSize: 18, fontWeight: 700 }}>Olá, {nome}! 👋</p>
           <div style={{ display: 'flex', gap: 6 }}>
@@ -2991,7 +2168,7 @@ function BotaoFlutuante({ icone, onClick, cor, posicaoInferior }) {
 function BottomNav({ abaAtiva, onMudarAba }) {
   const abas = [
     { id: 'dashboard', label: 'Início', icone: '🏠' },
-    { id: 'cartoes', label: 'Cartões', icone: '💳' },
+    { id: 'cartoes', label: 'Contas', icone: '🏦' },
     { id: 'metas', label: 'Metas', icone: '🎯' },
   ]
 
@@ -3032,7 +2209,7 @@ function BottomNav({ abaAtiva, onMudarAba }) {
 
 export default function App() {
   const [transacoes, setTransacoes] = useState(carregarTransacoes)
-  const [cartoes, setCartoes] = useState(carregarCartoes)
+  const [contas, setContas] = useState(carregarContas)
   const [metas, setMetas] = useState(carregarMetas)
   const [reserva, setReserva] = useState(carregarReserva)
   const [planejamentos, setPlanejamentos] = useState(carregarPlanejamentos)
@@ -3051,8 +2228,8 @@ export default function App() {
   }, [transacoes])
 
   useEffect(() => {
-    salvarCartoes(cartoes)
-  }, [cartoes])
+    salvarContas(contas)
+  }, [contas])
 
   useEffect(() => {
     salvarMetas(metas)
@@ -3103,16 +2280,16 @@ export default function App() {
     }
   }
 
-  function handleAdicionarCartao(novoCartao) {
-    setCartoes((atual) => [...atual, novoCartao])
+  function handleAdicionarConta(novaContaItem) {
+    setContas((atual) => [...atual, novaContaItem])
   }
 
-  function handleEditarCartao(cartaoAtualizado) {
-    setCartoes((atual) => atual.map((c) => (c.id === cartaoAtualizado.id ? cartaoAtualizado : c)))
+  function handleEditarConta(contaAtualizada) {
+    setContas((atual) => atual.map((c) => (c.id === contaAtualizada.id ? contaAtualizada : c)))
   }
 
-  function handleExcluirCartao(id) {
-    setCartoes((atual) => atual.filter((c) => c.id !== id))
+  function handleExcluirConta(id) {
+    setContas((atual) => atual.filter((c) => c.id !== id))
   }
 
   function handleAdicionarMeta(novaMeta) {
@@ -3219,7 +2396,7 @@ export default function App() {
           onExcluir={handleExcluir}
           nome={perfil.nome}
           preferencias={preferencias}
-          cartoes={cartoes}
+          contas={contas}
           onAbrirFilhos={() => setAbaAtiva('filhos')}
           onAbrirPlanejamento={() => setAbaAtiva('planejamento')}
           onAbrirConfiguracoes={() => setAbaAtiva('configuracoes')}
@@ -3251,7 +2428,7 @@ export default function App() {
           transacoes={transacoes}
           metas={metas}
           reserva={reserva}
-          cartoes={cartoes}
+          contas={contas}
           onVoltar={() => setAbaAtiva('dashboard')}
         />
       )}
@@ -3268,11 +2445,12 @@ export default function App() {
         />
       )}
       {abaAtiva === 'cartoes' && (
-        <Cartoes
-          cartoes={cartoes}
-          onAdicionarCartao={handleAdicionarCartao}
-          onEditarCartao={handleEditarCartao}
-          onExcluirCartao={handleExcluirCartao}
+        <Contas
+          contas={contas}
+          transacoes={transacoes}
+          onAdicionarConta={handleAdicionarConta}
+          onEditarConta={handleEditarConta}
+          onExcluirConta={handleExcluirConta}
         />
       )}
       {abaAtiva === 'metas' && (
@@ -3298,6 +2476,7 @@ export default function App() {
           }}
           transacaoInicial={transacaoEditando}
           filhos={filhos}
+          contas={contas}
         />
       )}
 
