@@ -380,232 +380,90 @@ function salvarPreferencias(preferencias) {
 
 // ---------- Componente: Dashboard ----------
 
-function Dashboard({ transacoes, onEditar, onExcluir, nome, limiteGastosMensal }) {
+function Dashboard({ transacoes, onEditar, onExcluir, limiteGastosMensal }) {
   const hojeStr = new Date().toISOString().slice(0, 10)
   const doMes = transacoes.filter((t) => t.data.startsWith(mesAtual()))
 
-  const receitasMes = doMes
-    .filter((t) => t.tipo === 'receita')
-    .reduce((soma, t) => soma + t.valor, 0)
-
-  const despesasMes = doMes
-    .filter((t) => t.tipo === 'despesa')
-    .reduce((soma, t) => soma + t.valor, 0)
-
-  const despesasFixas = doMes
-    .filter((t) => t.tipo === 'despesa' && t.fixa)
-    .reduce((soma, t) => soma + t.valor, 0)
-
+  const receitasMes = doMes.filter((t) => t.tipo === 'receita').reduce((s, t) => s + t.valor, 0)
+  const despesasMes = doMes.filter((t) => t.tipo === 'despesa').reduce((s, t) => s + t.valor, 0)
   const saldoMes = receitasMes - despesasMes
-
-  // Saldo total: soma de tudo que já aconteceu até hoje, não só o mês atual.
-  // Isso evita que o salário recebido no fim do mês passado "suma" da conta.
   const saldoAcumulado = transacoes
     .filter((t) => t.data <= hojeStr)
-    .reduce((soma, t) => soma + (t.tipo === 'receita' ? t.valor : -t.valor), 0)
-
-  const porCategoria = {}
-  doMes
-    .filter((t) => t.tipo === 'despesa')
-    .forEach((t) => {
-      porCategoria[t.categoria] = (porCategoria[t.categoria] || 0) + t.valor
-    })
-  const categoriasOrdenadas = Object.entries(porCategoria).sort((a, b) => b[1] - a[1])
+    .reduce((s, t) => s + (t.tipo === 'receita' ? t.valor : -t.valor), 0)
 
   const passouDoLimite = limiteGastosMensal > 0 && despesasMes > limiteGastosMensal
 
+  const ultimasTransacoes = [...doMes]
+    .sort((a, b) => new Date(b.data) - new Date(a.data))
+    .slice(0, 5)
+
   return (
-    <div style={{ padding: '4px 16px 16px', background: '#0F172A' }}>
+    <div style={{ padding: '8px 14px 8px', background: '#0F172A' }}>
+
       {passouDoLimite && (
-        <div
-          style={{
-            background: '#7F1D1D',
-            border: '1px solid #EF4444',
-            borderRadius: 12,
-            padding: 12,
-            marginBottom: 16,
-          }}
-        >
-          <p style={{ color: '#fff', fontSize: 13 }}>
-            ⚠️ Você já passou do seu limite de {formatarMoeda(limiteGastosMensal)} pra esse mês.
-          </p>
+        <div style={{ background: '#7F1D1D', border: '1px solid #EF4444', borderRadius: 10, padding: '8px 12px', marginBottom: 8 }}>
+          <p style={{ color: '#fff', fontSize: 12 }}>⚠️ Limite de {formatarMoeda(limiteGastosMensal)} ultrapassado este mês.</p>
         </div>
       )}
 
-
-      <div
-        style={{
-          background: 'linear-gradient(135deg, #6366F1, #4F46E5)',
-          borderRadius: 16,
-          padding: 20,
-          marginBottom: 16,
-        }}
-      >
-        <p style={{ color: '#E0E7FF', fontSize: 13, marginBottom: 4 }}>
-          Saldo total
-        </p>
-        <p style={{ color: '#fff', fontSize: 32, fontWeight: 700, marginBottom: 8 }}>
-          {formatarMoeda(saldoAcumulado)}
-        </p>
-        <p style={{ color: '#E0E7FF', fontSize: 12 }}>
-          Este mês: {saldoMes >= 0 ? '+' : ''}
-          {formatarMoeda(saldoMes)}
-        </p>
+      {/* Card principal compacto */}
+      <div style={{ background: 'linear-gradient(135deg, #6366F1, #4F46E5)', borderRadius: 14, padding: '14px 16px', marginBottom: 10 }}>
+        <p style={{ color: '#E0E7FF', fontSize: 11, marginBottom: 2 }}>Saldo total</p>
+        <p style={{ color: '#fff', fontSize: 26, fontWeight: 700, marginBottom: 4 }}>{formatarMoeda(saldoAcumulado)}</p>
+        <p style={{ color: '#E0E7FF', fontSize: 11 }}>Este mês: {saldoMes >= 0 ? '+' : ''}{formatarMoeda(saldoMes)}</p>
       </div>
 
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-        <div style={{ flex: 1, background: '#1E293B', borderRadius: 14, padding: 16 }}>
-          <p style={{ color: '#94A3B8', fontSize: 12, marginBottom: 4 }}>Receitas do mês</p>
-          <p style={{ color: '#22C55E', fontSize: 18, fontWeight: 600 }}>
-            {formatarMoeda(receitasMes)}
-          </p>
+      {/* Receitas e Despesas lado a lado compactos */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+        <div style={{ flex: 1, background: '#1E293B', borderRadius: 12, padding: '10px 12px' }}>
+          <p style={{ color: '#94A3B8', fontSize: 11, marginBottom: 2 }}>Receitas</p>
+          <p style={{ color: '#22C55E', fontSize: 15, fontWeight: 600 }}>{formatarMoeda(receitasMes)}</p>
         </div>
-        <div style={{ flex: 1, background: '#1E293B', borderRadius: 14, padding: 16 }}>
-          <p style={{ color: '#94A3B8', fontSize: 12, marginBottom: 4 }}>Despesas do mês</p>
-          <p style={{ color: '#EF4444', fontSize: 18, fontWeight: 600 }}>
-            {formatarMoeda(despesasMes)}
-          </p>
+        <div style={{ flex: 1, background: '#1E293B', borderRadius: 12, padding: '10px 12px' }}>
+          <p style={{ color: '#94A3B8', fontSize: 11, marginBottom: 2 }}>Despesas</p>
+          <p style={{ color: '#EF4444', fontSize: 15, fontWeight: 600 }}>{formatarMoeda(despesasMes)}</p>
         </div>
       </div>
 
-      {despesasFixas > 0 && (
-        <div
-          style={{
-            background: '#1E293B',
-            borderRadius: 14,
-            padding: 16,
-            marginBottom: 16,
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <div>
-            <p style={{ color: '#94A3B8', fontSize: 12 }}>📌 Despesas fixas do mês</p>
-            <p style={{ color: '#F59E0B', fontSize: 16, fontWeight: 600 }}>
-              {formatarMoeda(despesasFixas)}
-            </p>
-          </div>
-          <p style={{ color: '#64748B', fontSize: 12 }}>
-            {Math.round((despesasFixas / (despesasMes || 1)) * 100)}% dos gastos
-          </p>
-        </div>
+      {/* Últimas transações compactas */}
+      <p style={{ color: '#94A3B8', fontSize: 12, marginBottom: 6 }}>Últimas transações</p>
+      {ultimasTransacoes.length === 0 && (
+        <p style={{ color: '#64748B', fontSize: 13 }}>Nenhuma transação este mês ainda.</p>
       )}
-
-      {categoriasOrdenadas.length > 0 && (
-        <>
-          <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 8 }}>
-            Gastos por categoria
-          </p>
-          <div style={{ marginBottom: 16 }}>
-            {categoriasOrdenadas.map(([catId, valor]) => {
-              const cat = infoCategoria('despesa', catId)
-              const percentual = despesasMes > 0 ? (valor / despesasMes) * 100 : 0
-              return (
-                <div key={catId} style={{ marginBottom: 10 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ color: '#fff', fontSize: 13 }}>
-                      {cat.icone} {cat.label}
-                    </span>
-                    <span style={{ color: '#94A3B8', fontSize: 13 }}>
-                      {formatarMoeda(valor)}
-                    </span>
-                  </div>
-                  <div style={{ background: '#1E293B', borderRadius: 6, height: 6 }}>
-                    <div
-                      style={{
-                        width: `${percentual}%`,
-                        background: '#6366F1',
-                        height: 6,
-                        borderRadius: 6,
-                      }}
-                    />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </>
-      )}
-
-      <p style={{ color: '#94A3B8', fontSize: 13, marginBottom: 8 }}>
-        Últimas transações
-      </p>
-      {doMes.length === 0 && (
-        <p style={{ color: '#64748B', fontSize: 14 }}>
-          Nenhuma transação este mês ainda.
-        </p>
-      )}
-      {[...doMes]
-        .sort((a, b) => new Date(b.data) - new Date(a.data))
-        .slice(0, 10)
-        .map((t) => {
-          const cat = infoCategoria(t.tipo, t.categoria)
-          return (
-            <div
-              key={t.id}
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                background: '#1E293B',
-                borderRadius: 12,
-                padding: '12px 16px',
-                marginBottom: 8,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 18 }}>{cat.icone}</span>
-                <div>
-                  <p style={{ color: '#fff', fontSize: 14 }}>
-                    {t.descricao} {t.fixa && <span style={{ color: '#F59E0B' }}>📌</span>}
-                  </p>
-                  <p style={{ color: '#64748B', fontSize: 12 }}>
-                    {cat.label} · {t.data}
-                  </p>
-                </div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <p
-                  style={{
-                    color: t.tipo === 'receita' ? '#22C55E' : '#EF4444',
-                    fontSize: 14,
-                    fontWeight: 600,
-                    marginRight: 4,
-                  }}
-                >
-                  {t.tipo === 'receita' ? '+' : '-'} {formatarMoeda(t.valor)}
+      {ultimasTransacoes.map((t) => {
+        const cat = infoCategoria(t.tipo, t.categoria)
+        return (
+          <div
+            key={t.id}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: '#1E293B',
+              borderRadius: 10,
+              padding: '8px 12px',
+              marginBottom: 6,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 16 }}>{cat.icone}</span>
+              <div>
+                <p style={{ color: '#fff', fontSize: 13 }}>
+                  {t.descricao} {t.fixa && '📌'}
                 </p>
-                <button
-                  onClick={() => onEditar(t)}
-                  aria-label="Editar"
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    fontSize: 15,
-                    padding: 6,
-                    cursor: 'pointer',
-                  }}
-                >
-                  ✏️
-                </button>
-                <button
-                  onClick={() => onExcluir(t.id)}
-                  aria-label="Excluir"
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    fontSize: 15,
-                    padding: 6,
-                    cursor: 'pointer',
-                  }}
-                >
-                  🗑️
-                </button>
+                <p style={{ color: '#64748B', fontSize: 11 }}>{cat.label} · {t.data}</p>
               </div>
             </div>
-          )
-        })}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <p style={{ color: t.tipo === 'receita' ? '#22C55E' : '#EF4444', fontSize: 13, fontWeight: 600 }}>
+                {t.tipo === 'receita' ? '+' : '-'}{formatarMoeda(t.valor)}
+              </p>
+              <button onClick={() => onEditar(t)} style={{ background: 'transparent', border: 'none', fontSize: 13, padding: 4 }}>✏️</button>
+              <button onClick={() => onExcluir(t.id)} style={{ background: 'transparent', border: 'none', fontSize: 13, padding: 4 }}>🗑️</button>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -3063,14 +2921,14 @@ function Inicio({
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 6, marginBottom: 4, background: '#1E293B', borderRadius: 10, padding: 4 }}>
+        <div style={{ display: 'flex', gap: 4, marginBottom: 6, background: '#1E293B', borderRadius: 10, padding: 3 }}>
           {subAbas.map((s) => (
             <button
               key={s.id}
               onClick={() => setSubAba(s.id)}
               style={{
                 flex: 1,
-                padding: 8,
+                padding: '6px 4px',
                 borderRadius: 8,
                 border: 'none',
                 background: subAba === s.id ? '#6366F1' : 'transparent',
@@ -3352,8 +3210,6 @@ export default function App() {
         background: '#0F172A',
         fontFamily: 'system-ui, sans-serif',
         paddingBottom: 80,
-        maxWidth: 480,
-        margin: '0 auto',
       }}
     >
       {abaAtiva === 'dashboard' && (
