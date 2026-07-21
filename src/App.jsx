@@ -555,7 +555,7 @@ function Adicionar({ onAdicionar, onEditar, onCancelarEdicao, transacaoInicial, 
   }
 
   const inputStyle = {
-    width: '100%',
+    width: '80%',
     padding: '12px 14px',
     borderRadius: 10,
     border: '1px solid #334155',
