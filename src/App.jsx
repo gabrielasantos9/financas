@@ -2035,8 +2035,8 @@ function Inicio({
   return (
     <div>
       <div style={{
-        padding: '16px 14px 0',
-        paddingTop: 'calc(env(safe-area-inset-top, 44px) + 10px)',
+        padding: '0 14px 0',
+        paddingTop: 'max(env(safe-area-inset-top, 0px), 52px)',
         background: '#0F172A',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -2160,6 +2160,391 @@ function BotaoFlutuante({ icone, onClick, cor, posicaoInferior }) {
     >
       {icone}
     </button>
+  )
+}
+
+// ---------- Componente: FormNovaMeta ----------
+
+function FormNovaMeta({ onSalvar, onCancelar, metaInicial }) {
+  const [nome, setNome] = useState(metaInicial?.nome || '')
+  const [valorAlvo, setValorAlvo] = useState(metaInicial ? String(metaInicial.valorAlvo) : '')
+  const [valorAtual, setValorAtual] = useState(metaInicial ? String(metaInicial.valorAtual) : '0')
+  const [icone, setIcone] = useState(metaInicial?.icone || '🎯')
+  const emEdicao = Boolean(metaInicial)
+  const iconesDisponiveis = ['🎯','✈️','🚗','🏠','🎓','💍','🎂','🚨','🛡️']
+  const inputStyle = { width:'100%', padding:'12px 14px', borderRadius:10, border:'1px solid #334155', background:'#0F172A', color:'#fff', fontSize:15, marginBottom:14, boxSizing:'border-box' }
+
+  function handleSalvar() {
+    if (!nome.trim() || !valorAlvo || Number(valorAlvo) <= 0) { alert('Preencha o nome e valor alvo.'); return }
+    onSalvar({ id: emEdicao ? metaInicial.id : Date.now(), nome: nome.trim(), valorAlvo: Number(valorAlvo), valorAtual: Number(valorAtual) || 0, icone })
+  }
+
+  return (
+    <div style={{ background:'#1E293B', borderRadius:14, padding:16, marginBottom:16 }}>
+      <p style={{ color:'#fff', fontSize:15, fontWeight:600, marginBottom:12 }}>{emEdicao ? 'Editar meta' : 'Nova meta'}</p>
+      <label style={{ color:'#94A3B8', fontSize:13 }}>Ícone</label>
+      <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>
+        {iconesDisponiveis.map((ic) => (
+          <button key={ic} onClick={() => setIcone(ic)} style={{ fontSize:18, padding:8, borderRadius:8, border: icone === ic ? '2px solid #6366F1' : '2px solid transparent', background:'#0F172A' }}>{ic}</button>
+        ))}
+      </div>
+      <label style={{ color:'#94A3B8', fontSize:13 }}>Nome da meta</label>
+      <input style={inputStyle} placeholder="Ex: Viagem, Carro..." value={nome} onChange={(e) => setNome(e.target.value)} />
+      <label style={{ color:'#94A3B8', fontSize:13 }}>Valor alvo (R$)</label>
+      <input style={inputStyle} type="number" inputMode="decimal" placeholder="0,00" value={valorAlvo} onChange={(e) => setValorAlvo(e.target.value)} />
+      <label style={{ color:'#94A3B8', fontSize:13 }}>Já guardado (R$)</label>
+      <input style={inputStyle} type="number" inputMode="decimal" placeholder="0,00" value={valorAtual} onChange={(e) => setValorAtual(e.target.value)} />
+      <div style={{ display:'flex', gap:10 }}>
+        <button onClick={onCancelar} style={{ flex:1, padding:12, borderRadius:10, border:'none', background:'#334155', color:'#fff', fontWeight:600 }}>Cancelar</button>
+        <button onClick={handleSalvar} style={{ flex:1, padding:12, borderRadius:10, border:'none', background:'#6366F1', color:'#fff', fontWeight:700 }}>{emEdicao ? 'Salvar' : 'Adicionar'}</button>
+      </div>
+    </div>
+  )
+}
+
+// ---------- Componente: Reserva de emergência ----------
+
+function calcularMediaDespesasMensais(transacoes) {
+  const porMes = {}
+  transacoes.filter((t) => t.tipo === 'despesa').forEach((t) => {
+    const chave = t.data.slice(0, 7)
+    porMes[chave] = (porMes[chave] || 0) + t.valor
+  })
+  const chaves = Object.keys(porMes).sort().slice(-3)
+  if (chaves.length === 0) return 0
+  return chaves.reduce((s, k) => s + porMes[k], 0) / chaves.length
+}
+
+function FormReserva({ onSalvar, onCancelar, reservaInicial, despesaMediaMensal }) {
+  const [valorAtual, setValorAtual] = useState(reservaInicial ? String(reservaInicial.valorAtual) : '0')
+  const [mesesDesejados, setMesesDesejados] = useState(reservaInicial ? String(reservaInicial.mesesDesejados) : '6')
+  const [aporteMensalPlanejado, setAporteMensalPlanejado] = useState(reservaInicial ? String(reservaInicial.aporteMensalPlanejado) : '')
+  const inputStyle = { width:'100%', padding:'12px 14px', borderRadius:10, border:'1px solid #334155', background:'#0F172A', color:'#fff', fontSize:15, marginBottom:14, boxSizing:'border-box' }
+
+  function handleSalvar() {
+    if (!mesesDesejados || Number(mesesDesejados) <= 0) { alert('Informe quantos meses.'); return }
+    onSalvar({ valorAtual: Number(valorAtual) || 0, mesesDesejados: Number(mesesDesejados), aporteMensalPlanejado: Number(aporteMensalPlanejado) || 0 })
+  }
+
+  return (
+    <div style={{ background:'#1E293B', borderRadius:14, padding:16, marginBottom:16 }}>
+      <p style={{ color:'#fff', fontSize:14, fontWeight:600, marginBottom:4 }}>🛡️ Configurar reserva</p>
+      <p style={{ color:'#64748B', fontSize:12, marginBottom:12 }}>Média mensal: {formatarMoeda(despesaMediaMensal)}</p>
+      <label style={{ color:'#94A3B8', fontSize:13 }}>Quantos meses de despesas guardar?</label>
+      <input style={inputStyle} type="number" inputMode="numeric" placeholder="6" value={mesesDesejados} onChange={(e) => setMesesDesejados(e.target.value)} />
+      <label style={{ color:'#94A3B8', fontSize:13 }}>Já guardado (R$)</label>
+      <input style={inputStyle} type="number" inputMode="decimal" placeholder="0,00" value={valorAtual} onChange={(e) => setValorAtual(e.target.value)} />
+      <label style={{ color:'#94A3B8', fontSize:13 }}>Quanto guardar por mês? (opcional)</label>
+      <input style={inputStyle} type="number" inputMode="decimal" placeholder="0,00" value={aporteMensalPlanejado} onChange={(e) => setAporteMensalPlanejado(e.target.value)} />
+      <div style={{ display:'flex', gap:10 }}>
+        <button onClick={onCancelar} style={{ flex:1, padding:12, borderRadius:10, border:'none', background:'#334155', color:'#fff', fontWeight:600 }}>Cancelar</button>
+        <button onClick={handleSalvar} style={{ flex:1, padding:12, borderRadius:10, border:'none', background:'#6366F1', color:'#fff', fontWeight:700 }}>Salvar</button>
+      </div>
+    </div>
+  )
+}
+
+function ReservaEmergencia({ reserva, transacoes, onSalvarConfig, onContribuir }) {
+  const [editando, setEditando] = useState(false)
+  const [depositoAberto, setDepositoAberto] = useState(false)
+  const [valorDeposito, setValorDeposito] = useState('')
+  const despesaMediaMensal = calcularMediaDespesasMensais(transacoes)
+
+  if (!reserva || editando) {
+    return <div style={{ marginBottom:16 }}>
+      <FormReserva reservaInicial={reserva} despesaMediaMensal={despesaMediaMensal} onSalvar={(c) => { onSalvarConfig(c); setEditando(false) }} onCancelar={() => setEditando(false)} />
+    </div>
+  }
+
+  const valorAlvo = despesaMediaMensal * reserva.mesesDesejados
+  const percentual = valorAlvo > 0 ? Math.min((reserva.valorAtual / valorAlvo) * 100, 100) : 0
+  const completa = reserva.valorAtual >= valorAlvo
+  const faltam = Math.max(valorAlvo - reserva.valorAtual, 0)
+  const tempoEstimado = reserva.aporteMensalPlanejado > 0 ? Math.ceil(faltam / reserva.aporteMensalPlanejado) : null
+
+  function confirmarDeposito() {
+    const v = Number(valorDeposito)
+    if (!v || v <= 0) { alert('Valor inválido.'); return }
+    onContribuir(v)
+    setDepositoAberto(false)
+    setValorDeposito('')
+  }
+
+  return (
+    <div style={{ background:'linear-gradient(135deg, #0F766E, #0D9488)', borderRadius:14, padding:14, marginBottom:14 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+        <p style={{ color:'#fff', fontSize:14, fontWeight:700 }}>🛡️ Reserva de emergência {completa && '✅'}</p>
+        <button onClick={() => setEditando(true)} style={{ background:'rgba(255,255,255,0.15)', border:'none', color:'#fff', borderRadius:6, padding:'4px 8px', fontSize:12 }}>⚙️</button>
+      </div>
+      <div style={{ background:'rgba(0,0,0,0.2)', borderRadius:6, height:8, marginBottom:6 }}>
+        <div style={{ width:`${percentual}%`, background: completa ? '#22C55E' : '#fff', height:8, borderRadius:6 }} />
+      </div>
+      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
+        <p style={{ color:'#CCFBF1', fontSize:11 }}>{formatarMoeda(reserva.valorAtual)} de {formatarMoeda(valorAlvo)}</p>
+        <p style={{ color:'#CCFBF1', fontSize:11 }}>{Math.round(percentual)}%</p>
+      </div>
+      {!completa && <p style={{ color:'#CCFBF1', fontSize:11, marginBottom:8 }}>Faltam {formatarMoeda(faltam)}{tempoEstimado ? ` · ~${tempoEstimado} meses` : ''}</p>}
+      {depositoAberto ? (
+        <div style={{ display:'flex', gap:8 }}>
+          <input autoFocus type="number" inputMode="decimal" placeholder="Valor" value={valorDeposito} onChange={(e) => setValorDeposito(e.target.value)}
+            style={{ flex:1, padding:'8px 10px', borderRadius:8, border:'none', background:'rgba(255,255,255,0.15)', color:'#fff', fontSize:13 }} />
+          <button onClick={confirmarDeposito} style={{ background:'#fff', border:'none', color:'#0D9488', borderRadius:8, padding:'0 12px', fontWeight:700 }}>OK</button>
+          <button onClick={() => setDepositoAberto(false)} style={{ background:'rgba(255,255,255,0.15)', border:'none', color:'#fff', borderRadius:8, padding:'0 10px' }}>✕</button>
+        </div>
+      ) : !completa && (
+        <button onClick={() => setDepositoAberto(true)} style={{ width:'100%', padding:8, borderRadius:8, border:'1px dashed rgba(255,255,255,0.5)', background:'transparent', color:'#fff', fontWeight:600, fontSize:13 }}>💰 Depositar</button>
+      )}
+    </div>
+  )
+}
+
+// ---------- Componente: Metas ----------
+
+function Metas({ metas, onAdicionarMeta, onEditarMeta, onExcluirMeta, onContribuir, reserva, transacoes, onSalvarConfigReserva, onContribuirReserva }) {
+  const [modoForm, setModoForm] = useState(null)
+  const [depositoAberto, setDepositoAberto] = useState(null)
+  const [valorDeposito, setValorDeposito] = useState('')
+
+  function confirmarDeposito(meta) {
+    const v = Number(valorDeposito)
+    if (!v || v <= 0) { alert('Valor inválido.'); return }
+    onContribuir(meta.id, v)
+    setDepositoAberto(null)
+    setValorDeposito('')
+  }
+
+  return (
+    <div style={{ padding:'8px 14px', background:'#0F172A', minHeight:'100vh' }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+        <h1 style={{ fontSize:18, color:'#fff' }}>Metas</h1>
+        {!modoForm && <button onClick={() => setModoForm('novo')} style={{ background:'#6366F1', border:'none', color:'#fff', borderRadius:8, padding:'7px 12px', fontSize:13, fontWeight:600 }}>+ Meta</button>}
+      </div>
+
+      <ReservaEmergencia reserva={reserva} transacoes={transacoes} onSalvarConfig={onSalvarConfigReserva} onContribuir={onContribuirReserva} />
+
+      {modoForm === 'novo' && <FormNovaMeta onSalvar={(m) => { onAdicionarMeta(m); setModoForm(null) }} onCancelar={() => setModoForm(null)} />}
+      {modoForm && modoForm !== 'novo' && <FormNovaMeta metaInicial={modoForm} onSalvar={(m) => { onEditarMeta(m); setModoForm(null) }} onCancelar={() => setModoForm(null)} />}
+
+      {metas.length === 0 && !modoForm && <p style={{ color:'#64748B', fontSize:13 }}>Nenhuma meta ainda. Toque em "+ Meta" pra começar.</p>}
+
+      {metas.map((meta) => {
+        const percentual = meta.valorAlvo > 0 ? Math.min((meta.valorAtual / meta.valorAlvo) * 100, 100) : 0
+        const completa = meta.valorAtual >= meta.valorAlvo
+        const faltam = Math.max(meta.valorAlvo - meta.valorAtual, 0)
+        return (
+          <div key={meta.id} style={{ background:'#1E293B', borderRadius:12, padding:14, marginBottom:10 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+              <p style={{ color:'#fff', fontSize:14, fontWeight:600 }}>{meta.icone} {meta.nome} {completa && '✅'}</p>
+              <div style={{ display:'flex', gap:2 }}>
+                <button onClick={() => setModoForm(meta)} style={{ background:'transparent', border:'none', fontSize:13, padding:5 }}>✏️</button>
+                <button onClick={() => { if(window.confirm(`Excluir "${meta.nome}"?`)) onExcluirMeta(meta.id) }} style={{ background:'transparent', border:'none', fontSize:13, padding:5 }}>🗑️</button>
+              </div>
+            </div>
+            <div style={{ background:'#0F172A', borderRadius:6, height:8, marginBottom:6 }}>
+              <div style={{ width:`${percentual}%`, background: completa ? '#22C55E' : '#6366F1', height:8, borderRadius:6 }} />
+            </div>
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:6 }}>
+              <p style={{ color:'#94A3B8', fontSize:11 }}>{formatarMoeda(meta.valorAtual)} de {formatarMoeda(meta.valorAlvo)}</p>
+              <p style={{ color:'#94A3B8', fontSize:11 }}>{Math.round(percentual)}%</p>
+            </div>
+            {!completa && <p style={{ color:'#64748B', fontSize:11, marginBottom:8 }}>Faltam {formatarMoeda(faltam)}</p>}
+            {depositoAberto === meta.id ? (
+              <div style={{ display:'flex', gap:8 }}>
+                <input autoFocus type="number" inputMode="decimal" placeholder="Valor" value={valorDeposito} onChange={(e) => setValorDeposito(e.target.value)}
+                  style={{ flex:1, padding:'8px 10px', borderRadius:8, border:'1px solid #334155', background:'#0F172A', color:'#fff', fontSize:13 }} />
+                <button onClick={() => confirmarDeposito(meta)} style={{ background:'#22C55E', border:'none', color:'#fff', borderRadius:8, padding:'0 12px', fontWeight:700 }}>OK</button>
+                <button onClick={() => { setDepositoAberto(null); setValorDeposito('') }} style={{ background:'#334155', border:'none', color:'#fff', borderRadius:8, padding:'0 10px' }}>✕</button>
+              </div>
+            ) : !completa && (
+              <button onClick={() => setDepositoAberto(meta.id)} style={{ width:'100%', padding:8, borderRadius:8, border:'1px dashed #22C55E', background:'transparent', color:'#22C55E', fontWeight:600, fontSize:13 }}>💰 Depositar</button>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ---------- Componente: Relatórios ----------
+
+function calcularResumoMensal(transacoes, quantidadeMeses) {
+  const hoje = new Date()
+  const chaves = []
+  for (let i = quantidadeMeses - 1; i >= 0; i--) {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1)
+    chaves.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+  }
+  let acumulado = transacoes
+    .filter((t) => t.data < `${chaves[0]}-01`)
+    .reduce((s, t) => s + (t.tipo === 'receita' ? t.valor : -t.valor), 0)
+  return chaves.map((chave) => {
+    const doMes = transacoes.filter((t) => t.data.startsWith(chave))
+    const receitas = doMes.filter((t) => t.tipo === 'receita').reduce((s, t) => s + t.valor, 0)
+    const despesas = doMes.filter((t) => t.tipo === 'despesa').reduce((s, t) => s + t.valor, 0)
+    acumulado += receitas - despesas
+    return { chave, receitas, despesas, saldo: receitas - despesas, acumulado }
+  })
+}
+
+function Relatorios({ transacoes }) {
+  const resumo = calcularResumoMensal(transacoes, 6)
+  const maxValor = Math.max(...resumo.flatMap((m) => [m.receitas, m.despesas]), 1)
+  const chaveMesAtual = mesAtual()
+  const doMesAtual = transacoes.filter((t) => t.data.startsWith(chaveMesAtual) && t.tipo === 'despesa')
+  const porCategoria = {}
+  doMesAtual.forEach((t) => { porCategoria[t.categoria] = (porCategoria[t.categoria] || 0) + t.valor })
+  const totalDespesasMes = Object.values(porCategoria).reduce((s, v) => s + v, 0)
+  const categoriasOrdenadas = Object.entries(porCategoria).sort((a, b) => b[1] - a[1])
+  const maiorCategoria = categoriasOrdenadas[0]
+  const mesesComDados = resumo.filter((m) => m.receitas > 0 || m.despesas > 0)
+  const economiaMedia = mesesComDados.length > 0 ? mesesComDados.reduce((s, m) => s + m.saldo, 0) / mesesComDados.length : 0
+
+  function nomeMesAbrev(chave) { return NOMES_MESES[Number(chave.split('-')[1]) - 1].slice(0, 3) }
+
+  return (
+    <div style={{ padding:'8px 14px 8px', background:'#0F172A' }}>
+      <div style={{ background:'#1E293B', borderRadius:12, padding:14, marginBottom:12 }}>
+        <p style={{ color:'#94A3B8', fontSize:11, marginBottom:2 }}>Economia média mensal</p>
+        <p style={{ color: economiaMedia >= 0 ? '#22C55E' : '#EF4444', fontSize:20, fontWeight:700 }}>{formatarMoeda(economiaMedia)}</p>
+      </div>
+      {maiorCategoria && (
+        <div style={{ background:'#1E293B', borderRadius:12, padding:14, marginBottom:12 }}>
+          <p style={{ color:'#94A3B8', fontSize:11, marginBottom:2 }}>Maior gasto este mês</p>
+          <p style={{ color:'#fff', fontSize:14, fontWeight:600 }}>{infoCategoria('despesa', maiorCategoria[0]).icone} {infoCategoria('despesa', maiorCategoria[0]).label}</p>
+          <p style={{ color:'#F59E0B', fontSize:12 }}>{formatarMoeda(maiorCategoria[1])} · {totalDespesasMes > 0 ? Math.round((maiorCategoria[1] / totalDespesasMes) * 100) : 0}%</p>
+        </div>
+      )}
+      <p style={{ color:'#94A3B8', fontSize:12, marginBottom:8 }}>Receitas x Despesas — 6 meses</p>
+      <div style={{ display:'flex', alignItems:'flex-end', gap:8, height:100, background:'#1E293B', borderRadius:12, padding:'12px 10px 6px', marginBottom:12 }}>
+        {resumo.map((m) => (
+          <div key={m.chave} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', height:'100%' }}>
+            <div style={{ flex:1, display:'flex', alignItems:'flex-end', gap:2 }}>
+              <div style={{ width:8, height:`${(m.receitas/maxValor)*100}%`, minHeight: m.receitas>0?2:0, background:'#22C55E', borderRadius:3 }} />
+              <div style={{ width:8, height:`${(m.despesas/maxValor)*100}%`, minHeight: m.despesas>0?2:0, background:'#EF4444', borderRadius:3 }} />
+            </div>
+            <p style={{ color:'#64748B', fontSize:9, marginTop:4 }}>{nomeMesAbrev(m.chave)}</p>
+          </div>
+        ))}
+      </div>
+      {categoriasOrdenadas.length > 0 && (
+        <>
+          <p style={{ color:'#94A3B8', fontSize:12, marginBottom:8 }}>Categorias este mês</p>
+          {categoriasOrdenadas.map(([catId, valor]) => {
+            const cat = infoCategoria('despesa', catId)
+            const pct = totalDespesasMes > 0 ? (valor/totalDespesasMes)*100 : 0
+            return (
+              <div key={catId} style={{ marginBottom:8 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:3 }}>
+                  <span style={{ color:'#fff', fontSize:12 }}>{cat.icone} {cat.label}</span>
+                  <span style={{ color:'#94A3B8', fontSize:12 }}>{formatarMoeda(valor)}</span>
+                </div>
+                <div style={{ background:'#1E293B', borderRadius:4, height:5 }}>
+                  <div style={{ width:`${pct}%`, background:'#6366F1', height:5, borderRadius:4 }} />
+                </div>
+              </div>
+            )
+          })}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ---------- Componente: Planejamento ----------
+
+function FormItemAnual({ onSalvar, onCancelar, itemInicial }) {
+  const [nome, setNome] = useState(itemInicial?.nome || '')
+  const [valorEstimado, setValorEstimado] = useState(itemInicial ? String(itemInicial.valorEstimado) : '')
+  const [mes, setMes] = useState(itemInicial ? String(itemInicial.mes) : '1')
+  const emEdicao = Boolean(itemInicial)
+  const inputStyle = { width:'100%', padding:'12px 14px', borderRadius:10, border:'1px solid #334155', background:'#0F172A', color:'#fff', fontSize:15, marginBottom:14, boxSizing:'border-box' }
+
+  function handleSalvar() {
+    if (!nome.trim() || !valorEstimado || Number(valorEstimado) <= 0) { alert('Preencha nome e valor.'); return }
+    onSalvar({ id: emEdicao ? itemInicial.id : Date.now(), nome: nome.trim(), valorEstimado: Number(valorEstimado), mes: Number(mes) })
+  }
+
+  return (
+    <div style={{ background:'#1E293B', borderRadius:14, padding:16, marginBottom:16 }}>
+      <p style={{ color:'#fff', fontSize:14, fontWeight:600, marginBottom:12 }}>{emEdicao ? 'Editar item' : 'Novo item anual'}</p>
+      <label style={{ color:'#94A3B8', fontSize:13 }}>Nome</label>
+      <input style={inputStyle} placeholder="Ex: IPTU, 13º salário..." value={nome} onChange={(e) => setNome(e.target.value)} />
+      <label style={{ color:'#94A3B8', fontSize:13 }}>Valor estimado (R$)</label>
+      <input style={inputStyle} type="number" inputMode="decimal" placeholder="0,00" value={valorEstimado} onChange={(e) => setValorEstimado(e.target.value)} />
+      <label style={{ color:'#94A3B8', fontSize:13 }}>Mês previsto</label>
+      <select style={inputStyle} value={mes} onChange={(e) => setMes(e.target.value)}>
+        {NOMES_MESES.map((nomeMes, i) => <option key={i} value={i+1}>{nomeMes}</option>)}
+      </select>
+      <div style={{ display:'flex', gap:10 }}>
+        <button onClick={onCancelar} style={{ flex:1, padding:12, borderRadius:10, border:'none', background:'#334155', color:'#fff', fontWeight:600 }}>Cancelar</button>
+        <button onClick={handleSalvar} style={{ flex:1, padding:12, borderRadius:10, border:'none', background:'#6366F1', color:'#fff', fontWeight:700 }}>{emEdicao ? 'Salvar' : 'Adicionar'}</button>
+      </div>
+    </div>
+  )
+}
+
+function Planejamento({ transacoes, planejamentos, itensAnuais, onSalvarPlanejamentoMes, onAdicionarItemAnual, onEditarItemAnual, onExcluirItemAnual, onVoltar }) {
+  const chave = mesAtual()
+  const planoAtual = planejamentos[chave] || { receitaPrevista:0, despesaPrevista:0 }
+  const [receitaPrevista, setReceitaPrevista] = useState(planoAtual.receitaPrevista ? String(planoAtual.receitaPrevista) : '')
+  const [despesaPrevista, setDespesaPrevista] = useState(planoAtual.despesaPrevista ? String(planoAtual.despesaPrevista) : '')
+  const [modoFormItem, setModoFormItem] = useState(null)
+  const inputStyle = { width:'100%', padding:'12px 14px', borderRadius:10, border:'1px solid #334155', background:'#0F172A', color:'#fff', fontSize:15, marginBottom:14, boxSizing:'border-box' }
+
+  const doMes = transacoes.filter((t) => t.data.startsWith(chave))
+  const receitaReal = doMes.filter((t) => t.tipo === 'receita').reduce((s, t) => s+t.valor, 0)
+  const despesaReal = doMes.filter((t) => t.tipo === 'despesa').reduce((s, t) => s+t.valor, 0)
+  const receitaPrevNum = Number(receitaPrevista) || 0
+  const despesaPrevNum = Number(despesaPrevista) || 0
+  const saldoEsperado = receitaPrevNum - despesaPrevNum
+  const mesAtualNum = new Date().getMonth() + 1
+
+  return (
+    <div style={{ padding:'8px 14px', background:'#0F172A', minHeight:'100vh' }}>
+      <button onClick={onVoltar} style={{ background:'transparent', border:'none', color:'#94A3B8', fontSize:14, marginBottom:10, padding:0 }}>‹ Voltar</button>
+      <h1 style={{ fontSize:18, color:'#fff', marginBottom:14 }}>📋 Planejamento</h1>
+      <p style={{ color:'#94A3B8', fontSize:12, marginBottom:8 }}>Mês atual — {NOMES_MESES[mesAtualNum-1]}</p>
+      <div style={{ background:'#1E293B', borderRadius:12, padding:14, marginBottom:16 }}>
+        <label style={{ color:'#94A3B8', fontSize:13 }}>Receita prevista (R$)</label>
+        <input style={inputStyle} type="number" inputMode="decimal" placeholder="0,00" value={receitaPrevista} onChange={(e) => setReceitaPrevista(e.target.value)} />
+        <label style={{ color:'#94A3B8', fontSize:13 }}>Despesa prevista (R$)</label>
+        <input style={inputStyle} type="number" inputMode="decimal" placeholder="0,00" value={despesaPrevista} onChange={(e) => setDespesaPrevista(e.target.value)} />
+        <button onClick={() => onSalvarPlanejamentoMes(chave, { receitaPrevista:receitaPrevNum, despesaPrevista:despesaPrevNum })}
+          style={{ width:'100%', padding:11, borderRadius:10, border:'none', background:'#6366F1', color:'#fff', fontWeight:700, marginBottom:12 }}>Salvar plano</button>
+        <div style={{ borderTop:'1px solid #334155', paddingTop:10 }}>
+          {[['Saldo esperado', formatarMoeda(saldoEsperado), saldoEsperado>=0?'#22C55E':'#EF4444'],
+            ['Receita real', formatarMoeda(receitaReal), '#22C55E'],
+            ['Despesa real', formatarMoeda(despesaReal), '#EF4444']].map(([label, val, cor]) => (
+            <div key={label} style={{ display:'flex', justifyContent:'space-between', marginBottom:6 }}>
+              <p style={{ color:'#94A3B8', fontSize:12 }}>{label}</p>
+              <p style={{ color:cor, fontSize:12, fontWeight:600 }}>{val}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+        <p style={{ color:'#94A3B8', fontSize:12 }}>Visão anual (IPTU, 13º, férias...)</p>
+        {!modoFormItem && <button onClick={() => setModoFormItem('novo')} style={{ background:'#6366F1', border:'none', color:'#fff', borderRadius:8, padding:'6px 10px', fontSize:12, fontWeight:600 }}>+ Item</button>}
+      </div>
+      {modoFormItem === 'novo' && <FormItemAnual onSalvar={(i) => { onAdicionarItemAnual(i); setModoFormItem(null) }} onCancelar={() => setModoFormItem(null)} />}
+      {modoFormItem && modoFormItem !== 'novo' && <FormItemAnual itemInicial={modoFormItem} onSalvar={(i) => { onEditarItemAnual(i); setModoFormItem(null) }} onCancelar={() => setModoFormItem(null)} />}
+      {[...itensAnuais].sort((a,b)=>a.mes-b.mes).map((item) => {
+        const chegando = item.mes === mesAtualNum || item.mes === (mesAtualNum % 12) + 1
+        return (
+          <div key={item.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background: chegando?'#1E293B':'transparent', border:`1px solid ${chegando?'#6366F1':'#1E293B'}`, borderRadius:10, padding:'10px 12px', marginBottom:8 }}>
+            <div>
+              <p style={{ color:'#fff', fontSize:13 }}>{item.nome} {chegando && <span style={{ color:'#6366F1', fontSize:10 }}>chegando</span>}</p>
+              <p style={{ color:'#64748B', fontSize:11 }}>{NOMES_MESES[item.mes-1]}</p>
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+              <p style={{ color:'#F59E0B', fontSize:13, fontWeight:600 }}>{formatarMoeda(item.valorEstimado)}</p>
+              <button onClick={() => setModoFormItem(item)} style={{ background:'transparent', border:'none', fontSize:13, padding:4 }}>✏️</button>
+              <button onClick={() => { if(window.confirm(`Excluir "${item.nome}"?`)) onExcluirItemAnual(item.id) }} style={{ background:'transparent', border:'none', fontSize:13, padding:4 }}>🗑️</button>
+            </div>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
