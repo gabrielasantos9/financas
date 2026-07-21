@@ -693,7 +693,7 @@ function Adicionar({ onAdicionar, onEditar, onCancelarEdicao, transacaoInicial, 
       <button
         onClick={handleSalvar}
         style={{
-          width: '100%',
+          width: '80%',
           padding: 14,
           borderRadius: 10,
           border: 'none',
@@ -711,7 +711,7 @@ function Adicionar({ onAdicionar, onEditar, onCancelarEdicao, transacaoInicial, 
         <button
           onClick={onCancelarEdicao}
           style={{
-            width: '100%',
+            width: '80%',
             padding: 12,
             borderRadius: 10,
             border: 'none',
@@ -1089,7 +1089,7 @@ function Contas({ contas, transacoes, onAdicionarConta, onEditarConta, onExcluir
             }}>
               <button
                 onClick={() => setContaExpandida(expandida ? null : conta.id)}
-                style={{ width: '100%', textAlign: 'left', background: 'transparent', border: 'none', padding: 0 }}
+                style={{ width: '80%', textAlign: 'left', background: 'transparent', border: 'none', padding: 0 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                   <p style={{ color: '#fff', fontSize: 14, fontWeight: 700 }}>
@@ -1214,7 +1214,7 @@ function FormNovoFilho({ onSalvar, onCancelar, filhoInicial }) {
   const iconesDisponiveis = ['🧒', '👦', '👧', '👶']
 
   const inputStyle = {
-    width: '100%',
+    width: '80%',
     padding: '12px 14px',
     borderRadius: 10,
     border: '1px solid #334155',
@@ -1473,7 +1473,7 @@ function Assistente({ transacoes, metas, reserva, contas, onVoltar }) {
               onClick={() => enviarPergunta(p)}
               style={{
                 display: 'block',
-                width: '100%',
+                width: '80%',
                 textAlign: 'left',
                 background: '#1E293B',
                 border: 'none',
@@ -1661,7 +1661,7 @@ function Configuracoes({ segurancaConfig, onSalvarSeguranca, onRemoverSeguranca,
   )
 
   const inputStyle = {
-    width: '100%',
+    width: '80%',
     padding: '12px 14px',
     borderRadius: 10,
     border: '1px solid #334155',
@@ -1750,7 +1750,7 @@ function Configuracoes({ segurancaConfig, onSalvarSeguranca, onRemoverSeguranca,
         />
         <button
           onClick={handleSalvarLimite}
-          style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
+          style={{ width: '80%', padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
         >
           Salvar limite
         </button>
@@ -1759,7 +1759,7 @@ function Configuracoes({ segurancaConfig, onSalvarSeguranca, onRemoverSeguranca,
       <button
         onClick={() => setSenhaAberta(!senhaAberta)}
         style={{
-          width: '100%',
+          width: '80%',
           textAlign: 'left',
           background: 'transparent',
           border: 'none',
@@ -1781,7 +1781,7 @@ function Configuracoes({ segurancaConfig, onSalvarSeguranca, onRemoverSeguranca,
               </p>
               <button
                 onClick={() => setEtapa('definirNovo')}
-                style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
+                style={{ width: '80%', padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
               >
                 Criar PIN de 4 dígitos
               </button>
@@ -1811,7 +1811,7 @@ function Configuracoes({ segurancaConfig, onSalvarSeguranca, onRemoverSeguranca,
               {mensagem && <p style={{ color: '#EF4444', fontSize: 13, marginBottom: 12 }}>{mensagem}</p>}
               <button
                 onClick={handleDefinirPin}
-                style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
+                style={{ width: '80%', padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
               >
                 Salvar PIN
               </button>
@@ -1823,7 +1823,7 @@ function Configuracoes({ segurancaConfig, onSalvarSeguranca, onRemoverSeguranca,
               <p style={{ color: '#22C55E', fontSize: 13, marginBottom: 12 }}>✅ PIN ativado — o app pede o PIN toda vez que abrir.</p>
               <button
                 onClick={() => setEtapa('remover')}
-                style={{ width: '100%', padding: 12, borderRadius: 10, border: '1px solid #EF4444', background: 'transparent', color: '#EF4444', fontWeight: 600 }}
+                style={{ width: '80%', padding: 12, borderRadius: 10, border: '1px solid #EF4444', background: 'transparent', color: '#EF4444', fontWeight: 600 }}
               >
                 Remover PIN
               </button>
@@ -1895,7 +1895,7 @@ function AvisoPrivacidade({ onAceitar }) {
       </p>
       <button
         onClick={onAceitar}
-        style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
+        style={{ width: '80%', padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
       >
         Entendi
       </button>
@@ -1910,7 +1910,7 @@ function TelaBoasVindas({ onConcluir }) {
   const [frase, setFrase] = useState('')
 
   const inputStyle = {
-    width: '100%',
+    width: '80%',
     padding: '14px 16px',
     borderRadius: 10,
     border: '1px solid #334155',
@@ -1979,7 +1979,7 @@ function TelaBoasVindas({ onConcluir }) {
 
       <button
         onClick={handleContinuar}
-        style={{ width: '100%', padding: 16, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700, fontSize: 16 }}
+        style={{ width: '80%', padding: 16, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700, fontSize: 16 }}
       >
         Começar
       </button>
@@ -2175,7 +2175,7 @@ function FormNovaMeta({ onSalvar, onCancelar, metaInicial }) {
   const [icone, setIcone] = useState(metaInicial?.icone || '🎯')
   const emEdicao = Boolean(metaInicial)
   const iconesDisponiveis = ['🎯','✈️','🚗','🏠','🎓','💍','🎂','🚨','🛡️']
-  const inputStyle = { width:'100%', padding:'12px 14px', borderRadius:10, border:'1px solid #334155', background:'#0F172A', color:'#fff', fontSize:15, marginBottom:14, boxSizing:'border-box' }
+  const inputStyle = { width:'80%', padding:'12px 14px', borderRadius:10, border:'1px solid #334155', background:'#0F172A', color:'#fff', fontSize:15, marginBottom:14, boxSizing:'border-box' }
 
   function handleSalvar() {
     if (!nome.trim() || !valorAlvo || Number(valorAlvo) <= 0) { alert('Preencha o nome e valor alvo.'); return }
@@ -2263,7 +2263,7 @@ function Metas({ metas, onAdicionarMeta, onEditarMeta, onExcluirMeta, onContribu
                 <button onClick={() => { setDepositoAberto(null); setValorDeposito('') }} style={{ background:'#334155', border:'none', color:'#fff', borderRadius:8, padding:'0 10px' }}>✕</button>
               </div>
             ) : !completa && (
-              <button onClick={() => setDepositoAberto(meta.id)} style={{ width:'100%', padding:8, borderRadius:8, border:'1px dashed #22C55E', background:'transparent', color:'#22C55E', fontWeight:600, fontSize:13 }}>💰 Depositar</button>
+              <button onClick={() => setDepositoAberto(meta.id)} style={{ width:'80%', padding:8, borderRadius:8, border:'1px dashed #22C55E', background:'transparent', color:'#22C55E', fontWeight:600, fontSize:13 }}>💰 Depositar</button>
             )}
           </div>
         )
@@ -2279,7 +2279,7 @@ function FormItemAnual({ onSalvar, onCancelar, itemInicial }) {
   const [valorEstimado, setValorEstimado] = useState(itemInicial ? String(itemInicial.valorEstimado) : '')
   const [mes, setMes] = useState(itemInicial ? String(itemInicial.mes) : '1')
   const emEdicao = Boolean(itemInicial)
-  const inputStyle = { width:'100%', padding:'12px 14px', borderRadius:10, border:'1px solid #334155', background:'#0F172A', color:'#fff', fontSize:15, marginBottom:14, boxSizing:'border-box' }
+  const inputStyle = { width:'80%', padding:'12px 14px', borderRadius:10, border:'1px solid #334155', background:'#0F172A', color:'#fff', fontSize:15, marginBottom:14, boxSizing:'border-box' }
 
   function handleSalvar() {
     if (!nome.trim() || !valorEstimado || Number(valorEstimado) <= 0) { alert('Preencha nome e valor.'); return }
@@ -2311,7 +2311,7 @@ function Planejamento({ transacoes, planejamentos, itensAnuais, onSalvarPlanejam
   const [receitaPrevista, setReceitaPrevista] = useState(planoAtual.receitaPrevista ? String(planoAtual.receitaPrevista) : '')
   const [despesaPrevista, setDespesaPrevista] = useState(planoAtual.despesaPrevista ? String(planoAtual.despesaPrevista) : '')
   const [modoFormItem, setModoFormItem] = useState(null)
-  const inputStyle = { width:'100%', padding:'12px 14px', borderRadius:10, border:'1px solid #334155', background:'#0F172A', color:'#fff', fontSize:15, marginBottom:14, boxSizing:'border-box' }
+  const inputStyle = { width:'80%', padding:'12px 14px', borderRadius:10, border:'1px solid #334155', background:'#0F172A', color:'#fff', fontSize:15, marginBottom:14, boxSizing:'border-box' }
 
   const doMes = transacoes.filter((t) => t.data.startsWith(chave))
   const receitaReal = doMes.filter((t) => t.tipo === 'receita').reduce((s, t) => s+t.valor, 0)
@@ -2332,7 +2332,7 @@ function Planejamento({ transacoes, planejamentos, itensAnuais, onSalvarPlanejam
         <label style={{ color:'#94A3B8', fontSize:13 }}>Despesa prevista (R$)</label>
         <input style={inputStyle} type="number" inputMode="decimal" placeholder="0,00" value={despesaPrevista} onChange={(e) => setDespesaPrevista(e.target.value)} />
         <button onClick={() => onSalvarPlanejamentoMes(chave, { receitaPrevista:receitaPrevNum, despesaPrevista:despesaPrevNum })}
-          style={{ width:'100%', padding:11, borderRadius:10, border:'none', background:'#6366F1', color:'#fff', fontWeight:700, marginBottom:12 }}>Salvar plano</button>
+          style={{ width:'80%', padding:11, borderRadius:10, border:'none', background:'#6366F1', color:'#fff', fontWeight:700, marginBottom:12 }}>Salvar plano</button>
         <div style={{ borderTop:'1px solid #334155', paddingTop:10 }}>
           {[['Saldo esperado', formatarMoeda(saldoEsperado), saldoEsperado>=0?'#22C55E':'#EF4444'],
             ['Receita real', formatarMoeda(receitaReal), '#22C55E'],
