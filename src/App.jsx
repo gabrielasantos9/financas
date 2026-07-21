@@ -2201,12 +2201,6 @@ function FormNovaMeta({ onSalvar, onCancelar, metaInicial }) {
     </div>
   )
 }
-
-// ---------- Componente: Reserva de emergência ----------
-
-function calcularMediaDespesasMensais(transacoes) {
-  const porMes = {}
-  transacoes.filter((t) => t.tipo === 'despesa').forEach((t) => {
     const chave = t.data.slice(0, 7)
     porMes[chave] = (porMes[chave] || 0) + t.valor
   })
@@ -2371,11 +2365,6 @@ function calcularResumoMensal(transacoes, quantidadeMeses) {
   const hoje = new Date()
   const chaves = []
   for (let i = quantidadeMeses - 1; i >= 0; i--) {
-    const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1)
-    chaves.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
-  }
-  let acumulado = transacoes
-    .filter((t) => t.data < `${chaves[0]}-01`)
     .reduce((s, t) => s + (t.tipo === 'receita' ? t.valor : -t.valor), 0)
   return chaves.map((chave) => {
     const doMes = transacoes.filter((t) => t.data.startsWith(chave))
