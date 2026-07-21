@@ -177,6 +177,8 @@ const TIPOS_CONTA = [
   { id: 'alimentacao', label: 'Alimentação / Refeição', icone: '🍽️' },
   { id: 'credito', label: 'Cartão de Crédito', icone: '💜' },
   { id: 'dinheiro', label: 'Dinheiro', icone: '💵' },
+  { id: 'pensão ', label: 'Pensão', icone: '👶' },
+  { id: 'investimento', label: 'Investimento', icone: '💲' },
 ]
 
 function infoTipoConta(tipoId) {
@@ -943,7 +945,7 @@ function FormNovaConta({ onSalvar, onCancelar, contaInicial }) {
   const ehCredito = tipo === 'credito'
 
   const inputStyle = {
-    width: '100%', padding: '12px 14px', borderRadius: 10,
+    width: '80%', padding: '12px 14px', borderRadius: 10,
     border: '1px solid #334155', background: '#0F172A',
     color: '#fff', fontSize: 15, marginBottom: 14, boxSizing: 'border-box',
   }
