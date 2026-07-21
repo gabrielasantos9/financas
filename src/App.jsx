@@ -3,16 +3,16 @@ import { useState, useEffect } from 'react'
 // ---------- Categorias ----------
 
 const CATEGORIAS_DESPESA = [
-  { id: 'mercado', label: 'Mercado', icone: '🛒' },
-  { id: 'restaurante/padaria', label: 'Restaurante/Padaria', icone: '👩‍🍳' },
-  { id: 'transporte', label: 'Transporte', icone: '🚗' },
-  { id: 'lazer', label: 'Lazer', icone: '🎉' },
-  { id: 'saude', label: 'Saúde', icone: '💊' },
-  { id: 'educacao', label: 'Educação', icone: '📚' },
-  { id: 'casa', label: 'Casa', icone: '🏠' },
-  { id: 'assinaturas', label: 'Assinaturas', icone: '📺' },
-  { id: 'filhos', label: 'Filhos', icone: '🧸' },
-  { id: 'outros', label: 'Outros', icone: '📦' },
+  { id: 'mercado',      label: 'Mercado',      icone: '🛒' },
+  { id: 'alimentacao',  label: 'Alimentação',  icone: '🍽️' },
+  { id: 'transporte',   label: 'Transporte',   icone: '🚗' },
+  { id: 'lazer',        label: 'Lazer',        icone: '🎉' },
+  { id: 'saude',        label: 'Saúde',        icone: '💊' },
+  { id: 'educacao',     label: 'Educação',     icone: '📚' },
+  { id: 'casa',         label: 'Casa',         icone: '🏠' },
+  { id: 'assinaturas',  label: 'Assinaturas',  icone: '📺' },
+  { id: 'filhos',       label: 'Filhos',       icone: '🧸' },
+  { id: 'outros',       label: 'Outros',       icone: '📦' },
 ]
 
 const CATEGORIAS_RECEITA = [
@@ -171,14 +171,14 @@ function salvarCartoes(cartoes) {
 // ---------- Tipos de Conta ----------
 
 const TIPOS_CONTA = [
-  { id: 'corrente', label: 'Conta Corrente', icone: '🏦' },
-  { id: 'poupanca', label: 'Poupança', icone: '💰' },
-  { id: 'debito', label: 'Cartão de Débito', icone: '💳' },
-  { id: 'alimentacao', label: 'Alimentação / Refeição', icone: '🍽️' },
-  { id: 'credito', label: 'Cartão de Crédito', icone: '💜' },
-  { id: 'dinheiro', label: 'Dinheiro', icone: '💵' },
-  { id: 'pensão ', label: 'Pensão', icone: '👶' },
-  { id: 'investimento', label: 'Investimento', icone: '💲' },
+  { id: 'corrente',     label: 'Conta Corrente',        icone: '🏦', excluirDoSaldo: false },
+  { id: 'poupanca',     label: 'Poupança',               icone: '💰', excluirDoSaldo: false },
+  { id: 'debito',       label: 'Cartão de Débito',       icone: '💳', excluirDoSaldo: false },
+  { id: 'alimentacao',  label: 'Alimentação / Refeição', icone: '🍽️', excluirDoSaldo: true  },
+  { id: 'credito',      label: 'Cartão de Crédito',      icone: '💜', excluirDoSaldo: true  },
+  { id: 'dinheiro',     label: 'Dinheiro',               icone: '💵', excluirDoSaldo: false },
+  { id: 'pensao',       label: 'Pensão',                 icone: '👶', excluirDoSaldo: true  },
+  { id: 'investimento', label: 'Investimento',           icone: '📈', excluirDoSaldo: true  },
 ]
 
 function infoTipoConta(tipoId) {
@@ -419,16 +419,29 @@ function salvarPreferencias(preferencias) {
 
 // ---------- Componente: Dashboard ----------
 
-function Dashboard({ transacoes, onEditar, onExcluir, limiteGastosMensal }) {
+function Dashboard({ transacoes, onEditar, onExcluir, limiteGastosMensal, contas }) {
   const hojeStr = new Date().toISOString().slice(0, 10)
   const doMes = transacoes.filter((t) => t.data.startsWith(mesAtual()))
 
   const receitasMes = doMes.filter((t) => t.tipo === 'receita').reduce((s, t) => s + t.valor, 0)
   const despesasMes = doMes.filter((t) => t.tipo === 'despesa').reduce((s, t) => s + t.valor, 0)
   const saldoMes = receitasMes - despesasMes
+
+  // Saldo total exclui contas marcadas como excluirDoSaldo (pensão, investimento, alimentação, crédito)
+  const contasExcluidas = new Set(
+    (contas || [])
+      .filter((c) => TIPOS_CONTA.find((t) => t.id === c.tipo)?.excluirDoSaldo)
+      .map((c) => c.id)
+  )
   const saldoAcumulado = transacoes
-    .filter((t) => t.data <= hojeStr)
+    .filter((t) => t.data <= hojeStr && !contasExcluidas.has(t.contaId))
     .reduce((s, t) => s + (t.tipo === 'receita' ? t.valor : -t.valor), 0)
+
+  // Saldo por conta (excluindo crédito, que usa fatura)
+  const contasComSaldo = (contas || []).filter((c) => {
+    const tipo = TIPOS_CONTA.find((t) => t.id === c.tipo)
+    return tipo && c.tipo !== 'credito'
+  })
 
   const passouDoLimite = limiteGastosMensal > 0 && despesasMes > limiteGastosMensal
 
@@ -445,14 +458,14 @@ function Dashboard({ transacoes, onEditar, onExcluir, limiteGastosMensal }) {
         </div>
       )}
 
-      {/* Card principal compacto */}
+      {/* Card principal */}
       <div style={{ background: 'linear-gradient(135deg, #6366F1, #4F46E5)', borderRadius: 14, padding: '14px 16px', marginBottom: 10 }}>
-        <p style={{ color: '#E0E7FF', fontSize: 11, marginBottom: 2 }}>Saldo total</p>
+        <p style={{ color: '#E0E7FF', fontSize: 11, marginBottom: 2 }}>Saldo disponível</p>
         <p style={{ color: '#fff', fontSize: 26, fontWeight: 700, marginBottom: 4 }}>{formatarMoeda(saldoAcumulado)}</p>
         <p style={{ color: '#E0E7FF', fontSize: 11 }}>Este mês: {saldoMes >= 0 ? '+' : ''}{formatarMoeda(saldoMes)}</p>
       </div>
 
-      {/* Receitas e Despesas lado a lado compactos */}
+      {/* Receitas e Despesas */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
         <div style={{ flex: 1, background: '#1E293B', borderRadius: 12, padding: '10px 12px' }}>
           <p style={{ color: '#94A3B8', fontSize: 11, marginBottom: 2 }}>Receitas</p>
@@ -464,37 +477,53 @@ function Dashboard({ transacoes, onEditar, onExcluir, limiteGastosMensal }) {
         </div>
       </div>
 
-      {/* Últimas transações compactas */}
+      {/* Saldo por conta */}
+      {contasComSaldo.length > 0 && (
+        <div style={{ background: '#1E293B', borderRadius: 12, padding: '10px 12px', marginBottom: 10 }}>
+          <p style={{ color: '#94A3B8', fontSize: 11, marginBottom: 8 }}>Saldo por conta</p>
+          {contasComSaldo.map((conta) => {
+            const tipo = infoTipoConta(conta.tipo)
+            const saldo = transacoes
+              .filter((t) => t.contaId === conta.id && t.data <= hojeStr)
+              .reduce((s, t) => s + (t.tipo === 'receita' ? t.valor : -t.valor), 0)
+            const excluida = contasExcluidas.has(conta.id)
+            return (
+              <div key={conta.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <p style={{ color: excluida ? '#64748B' : '#fff', fontSize: 12 }}>
+                  {tipo.icone} {conta.nome} {excluida && <span style={{ fontSize: 10, color: '#64748B' }}>(separado)</span>}
+                </p>
+                <p style={{ color: saldo >= 0 ? '#22C55E' : '#EF4444', fontSize: 12, fontWeight: 600 }}>
+                  {formatarMoeda(saldo)}
+                </p>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Últimas transações */}
       <p style={{ color: '#94A3B8', fontSize: 12, marginBottom: 6 }}>Últimas transações</p>
       {ultimasTransacoes.length === 0 && (
         <p style={{ color: '#64748B', fontSize: 13 }}>Nenhuma transação este mês ainda.</p>
       )}
       {ultimasTransacoes.map((t) => {
         const cat = infoCategoria(t.tipo, t.categoria)
+        const contaTransacao = (contas || []).find((c) => c.id === t.contaId)
         return (
-          <div
-            key={t.id}
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              background: '#1E293B',
-              borderRadius: 10,
-              padding: '8px 12px',
-              marginBottom: 6,
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 16 }}>{cat.icone}</span>
-              <div>
-                <p style={{ color: '#fff', fontSize: 13 }}>
+          <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#1E293B', borderRadius: 10, padding: '8px 12px', marginBottom: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+              <span style={{ fontSize: 15 }}>{cat.icone}</span>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ color: '#fff', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {t.descricao} {t.fixa && '📌'}
                 </p>
-                <p style={{ color: '#64748B', fontSize: 11 }}>{cat.label} · {t.data}</p>
+                <p style={{ color: '#64748B', fontSize: 10 }}>
+                  {cat.label}{contaTransacao ? ` · ${contaTransacao.nome}` : ''} · {t.data}
+                </p>
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <p style={{ color: t.tipo === 'receita' ? '#22C55E' : '#EF4444', fontSize: 13, fontWeight: 600 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+              <p style={{ color: t.tipo === 'receita' ? '#22C55E' : '#EF4444', fontSize: 12, fontWeight: 600 }}>
                 {t.tipo === 'receita' ? '+' : '-'}{formatarMoeda(t.valor)}
               </p>
               <button onClick={() => onEditar(t)} style={{ background: 'transparent', border: 'none', fontSize: 13, padding: 4 }}>✏️</button>
@@ -555,7 +584,7 @@ function Adicionar({ onAdicionar, onEditar, onCancelarEdicao, transacaoInicial, 
   }
 
   const inputStyle = {
-    width: '80%',
+    width: '100%',
     padding: '12px 14px',
     borderRadius: 10,
     border: '1px solid #334155',
@@ -693,7 +722,7 @@ function Adicionar({ onAdicionar, onEditar, onCancelarEdicao, transacaoInicial, 
       <button
         onClick={handleSalvar}
         style={{
-          width: '80%',
+          width: '100%',
           padding: 14,
           borderRadius: 10,
           border: 'none',
@@ -711,7 +740,7 @@ function Adicionar({ onAdicionar, onEditar, onCancelarEdicao, transacaoInicial, 
         <button
           onClick={onCancelarEdicao}
           style={{
-            width: '80%',
+            width: '100%',
             padding: 12,
             borderRadius: 10,
             border: 'none',
@@ -945,7 +974,7 @@ function FormNovaConta({ onSalvar, onCancelar, contaInicial }) {
   const ehCredito = tipo === 'credito'
 
   const inputStyle = {
-    width: '80%', padding: '12px 14px', borderRadius: 10,
+    width: '100%', padding: '12px 14px', borderRadius: 10,
     border: '1px solid #334155', background: '#0F172A',
     color: '#fff', fontSize: 15, marginBottom: 14, boxSizing: 'border-box',
   }
@@ -1089,7 +1118,7 @@ function Contas({ contas, transacoes, onAdicionarConta, onEditarConta, onExcluir
             }}>
               <button
                 onClick={() => setContaExpandida(expandida ? null : conta.id)}
-                style={{ width: '80%', textAlign: 'left', background: 'transparent', border: 'none', padding: 0 }}
+                style={{ width: '100%', textAlign: 'left', background: 'transparent', border: 'none', padding: 0 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                   <p style={{ color: '#fff', fontSize: 14, fontWeight: 700 }}>
@@ -1214,7 +1243,7 @@ function FormNovoFilho({ onSalvar, onCancelar, filhoInicial }) {
   const iconesDisponiveis = ['🧒', '👦', '👧', '👶']
 
   const inputStyle = {
-    width: '80%',
+    width: '100%',
     padding: '12px 14px',
     borderRadius: 10,
     border: '1px solid #334155',
@@ -1473,7 +1502,7 @@ function Assistente({ transacoes, metas, reserva, contas, onVoltar }) {
               onClick={() => enviarPergunta(p)}
               style={{
                 display: 'block',
-                width: '80%',
+                width: '100%',
                 textAlign: 'left',
                 background: '#1E293B',
                 border: 'none',
@@ -1661,7 +1690,7 @@ function Configuracoes({ segurancaConfig, onSalvarSeguranca, onRemoverSeguranca,
   )
 
   const inputStyle = {
-    width: '80%',
+    width: '100%',
     padding: '12px 14px',
     borderRadius: 10,
     border: '1px solid #334155',
@@ -1750,7 +1779,7 @@ function Configuracoes({ segurancaConfig, onSalvarSeguranca, onRemoverSeguranca,
         />
         <button
           onClick={handleSalvarLimite}
-          style={{ width: '80%', padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
+          style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
         >
           Salvar limite
         </button>
@@ -1759,7 +1788,7 @@ function Configuracoes({ segurancaConfig, onSalvarSeguranca, onRemoverSeguranca,
       <button
         onClick={() => setSenhaAberta(!senhaAberta)}
         style={{
-          width: '80%',
+          width: '100%',
           textAlign: 'left',
           background: 'transparent',
           border: 'none',
@@ -1781,7 +1810,7 @@ function Configuracoes({ segurancaConfig, onSalvarSeguranca, onRemoverSeguranca,
               </p>
               <button
                 onClick={() => setEtapa('definirNovo')}
-                style={{ width: '80%', padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
+                style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
               >
                 Criar PIN de 4 dígitos
               </button>
@@ -1811,7 +1840,7 @@ function Configuracoes({ segurancaConfig, onSalvarSeguranca, onRemoverSeguranca,
               {mensagem && <p style={{ color: '#EF4444', fontSize: 13, marginBottom: 12 }}>{mensagem}</p>}
               <button
                 onClick={handleDefinirPin}
-                style={{ width: '80%', padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
+                style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
               >
                 Salvar PIN
               </button>
@@ -1823,7 +1852,7 @@ function Configuracoes({ segurancaConfig, onSalvarSeguranca, onRemoverSeguranca,
               <p style={{ color: '#22C55E', fontSize: 13, marginBottom: 12 }}>✅ PIN ativado — o app pede o PIN toda vez que abrir.</p>
               <button
                 onClick={() => setEtapa('remover')}
-                style={{ width: '80%', padding: 12, borderRadius: 10, border: '1px solid #EF4444', background: 'transparent', color: '#EF4444', fontWeight: 600 }}
+                style={{ width: '100%', padding: 12, borderRadius: 10, border: '1px solid #EF4444', background: 'transparent', color: '#EF4444', fontWeight: 600 }}
               >
                 Remover PIN
               </button>
@@ -1895,7 +1924,7 @@ function AvisoPrivacidade({ onAceitar }) {
       </p>
       <button
         onClick={onAceitar}
-        style={{ width: '80%', padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
+        style={{ width: '100%', padding: 12, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700 }}
       >
         Entendi
       </button>
@@ -1910,7 +1939,7 @@ function TelaBoasVindas({ onConcluir }) {
   const [frase, setFrase] = useState('')
 
   const inputStyle = {
-    width: '80%',
+    width: '100%',
     padding: '14px 16px',
     borderRadius: 10,
     border: '1px solid #334155',
@@ -1979,7 +2008,7 @@ function TelaBoasVindas({ onConcluir }) {
 
       <button
         onClick={handleContinuar}
-        style={{ width: '80%', padding: 16, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700, fontSize: 16 }}
+        style={{ width: '100%', padding: 16, borderRadius: 10, border: 'none', background: '#6366F1', color: '#fff', fontWeight: 700, fontSize: 16 }}
       >
         Começar
       </button>
@@ -2129,6 +2158,7 @@ function Inicio({
           onEditar={onEditar}
           onExcluir={onExcluir}
           limiteGastosMensal={preferencias?.limiteGastosMensal || 0}
+          contas={contas}
         />
       )}
       {subAba === 'calendario' && <Calendario transacoes={transacoes} />}
@@ -2175,7 +2205,7 @@ function FormNovaMeta({ onSalvar, onCancelar, metaInicial }) {
   const [icone, setIcone] = useState(metaInicial?.icone || '🎯')
   const emEdicao = Boolean(metaInicial)
   const iconesDisponiveis = ['🎯','✈️','🚗','🏠','🎓','💍','🎂','🚨','🛡️']
-  const inputStyle = { width:'80%', padding:'12px 14px', borderRadius:10, border:'1px solid #334155', background:'#0F172A', color:'#fff', fontSize:15, marginBottom:14, boxSizing:'border-box' }
+  const inputStyle = { width:'100%', padding:'12px 14px', borderRadius:10, border:'1px solid #334155', background:'#0F172A', color:'#fff', fontSize:15, marginBottom:14, boxSizing:'border-box' }
 
   function handleSalvar() {
     if (!nome.trim() || !valorAlvo || Number(valorAlvo) <= 0) { alert('Preencha o nome e valor alvo.'); return }
@@ -2201,6 +2231,91 @@ function FormNovaMeta({ onSalvar, onCancelar, metaInicial }) {
         <button onClick={onCancelar} style={{ flex:1, padding:12, borderRadius:10, border:'none', background:'#334155', color:'#fff', fontWeight:600 }}>Cancelar</button>
         <button onClick={handleSalvar} style={{ flex:1, padding:12, borderRadius:10, border:'none', background:'#6366F1', color:'#fff', fontWeight:700 }}>{emEdicao ? 'Salvar' : 'Adicionar'}</button>
       </div>
+    </div>
+  )
+}
+
+// ---------- Componente: Reserva de emergência ----------
+
+function FormReserva({ onSalvar, onCancelar, reservaInicial, despesaMediaMensal }) {
+  const [valorAtual, setValorAtual] = useState(reservaInicial ? String(reservaInicial.valorAtual) : '0')
+  const [mesesDesejados, setMesesDesejados] = useState(reservaInicial ? String(reservaInicial.mesesDesejados) : '6')
+  const [aporteMensalPlanejado, setAporteMensalPlanejado] = useState(reservaInicial ? String(reservaInicial.aporteMensalPlanejado) : '')
+  const inputStyle = { width:'100%', padding:'12px 14px', borderRadius:10, border:'1px solid #334155', background:'#0F172A', color:'#fff', fontSize:15, marginBottom:14, boxSizing:'border-box' }
+
+  function handleSalvar() {
+    if (!mesesDesejados || Number(mesesDesejados) <= 0) { alert('Informe quantos meses.'); return }
+    onSalvar({ valorAtual: Number(valorAtual) || 0, mesesDesejados: Number(mesesDesejados), aporteMensalPlanejado: Number(aporteMensalPlanejado) || 0 })
+  }
+
+  return (
+    <div style={{ background:'#1E293B', borderRadius:14, padding:16, marginBottom:16 }}>
+      <p style={{ color:'#fff', fontSize:14, fontWeight:600, marginBottom:4 }}>🛡️ Configurar reserva</p>
+      <p style={{ color:'#64748B', fontSize:12, marginBottom:12 }}>Média mensal: {formatarMoeda(despesaMediaMensal)}</p>
+      <label style={{ color:'#94A3B8', fontSize:13 }}>Quantos meses de despesas guardar?</label>
+      <input style={inputStyle} type="number" inputMode="numeric" placeholder="6" value={mesesDesejados} onChange={(e) => setMesesDesejados(e.target.value)} />
+      <label style={{ color:'#94A3B8', fontSize:13 }}>Já guardado (R$)</label>
+      <input style={inputStyle} type="number" inputMode="decimal" placeholder="0,00" value={valorAtual} onChange={(e) => setValorAtual(e.target.value)} />
+      <label style={{ color:'#94A3B8', fontSize:13 }}>Quanto guardar por mês? (opcional)</label>
+      <input style={inputStyle} type="number" inputMode="decimal" placeholder="0,00" value={aporteMensalPlanejado} onChange={(e) => setAporteMensalPlanejado(e.target.value)} />
+      <div style={{ display:'flex', gap:10 }}>
+        <button onClick={onCancelar} style={{ flex:1, padding:12, borderRadius:10, border:'none', background:'#334155', color:'#fff', fontWeight:600 }}>Cancelar</button>
+        <button onClick={handleSalvar} style={{ flex:1, padding:12, borderRadius:10, border:'none', background:'#6366F1', color:'#fff', fontWeight:700 }}>Salvar</button>
+      </div>
+    </div>
+  )
+}
+
+function ReservaEmergencia({ reserva, transacoes, onSalvarConfig, onContribuir }) {
+  const [editando, setEditando] = useState(false)
+  const [depositoAberto, setDepositoAberto] = useState(false)
+  const [valorDeposito, setValorDeposito] = useState('')
+  const despesaMediaMensal = calcularMediaDespesasMensais(transacoes)
+
+  if (!reserva || editando) {
+    return <div style={{ marginBottom:16 }}>
+      <FormReserva reservaInicial={reserva} despesaMediaMensal={despesaMediaMensal} onSalvar={(c) => { onSalvarConfig(c); setEditando(false) }} onCancelar={() => setEditando(false)} />
+    </div>
+  }
+
+  const valorAlvo = despesaMediaMensal * reserva.mesesDesejados
+  const percentual = valorAlvo > 0 ? Math.min((reserva.valorAtual / valorAlvo) * 100, 100) : 0
+  const completa = reserva.valorAtual >= valorAlvo
+  const faltam = Math.max(valorAlvo - reserva.valorAtual, 0)
+  const tempoEstimado = reserva.aporteMensalPlanejado > 0 ? Math.ceil(faltam / reserva.aporteMensalPlanejado) : null
+
+  function confirmarDeposito() {
+    const v = Number(valorDeposito)
+    if (!v || v <= 0) { alert('Valor inválido.'); return }
+    onContribuir(v)
+    setDepositoAberto(false)
+    setValorDeposito('')
+  }
+
+  return (
+    <div style={{ background:'linear-gradient(135deg, #0F766E, #0D9488)', borderRadius:14, padding:14, marginBottom:14 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+        <p style={{ color:'#fff', fontSize:14, fontWeight:700 }}>🛡️ Reserva de emergência {completa && '✅'}</p>
+        <button onClick={() => setEditando(true)} style={{ background:'rgba(255,255,255,0.15)', border:'none', color:'#fff', borderRadius:6, padding:'4px 8px', fontSize:12 }}>⚙️</button>
+      </div>
+      <div style={{ background:'rgba(0,0,0,0.2)', borderRadius:6, height:8, marginBottom:6 }}>
+        <div style={{ width:`${percentual}%`, background: completa ? '#22C55E' : '#fff', height:8, borderRadius:6 }} />
+      </div>
+      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
+        <p style={{ color:'#CCFBF1', fontSize:11 }}>{formatarMoeda(reserva.valorAtual)} de {formatarMoeda(valorAlvo)}</p>
+        <p style={{ color:'#CCFBF1', fontSize:11 }}>{Math.round(percentual)}%</p>
+      </div>
+      {!completa && <p style={{ color:'#CCFBF1', fontSize:11, marginBottom:8 }}>Faltam {formatarMoeda(faltam)}{tempoEstimado ? ` · ~${tempoEstimado} meses` : ''}</p>}
+      {depositoAberto ? (
+        <div style={{ display:'flex', gap:8 }}>
+          <input autoFocus type="number" inputMode="decimal" placeholder="Valor" value={valorDeposito} onChange={(e) => setValorDeposito(e.target.value)}
+            style={{ flex:1, padding:'8px 10px', borderRadius:8, border:'none', background:'rgba(255,255,255,0.15)', color:'#fff', fontSize:13 }} />
+          <button onClick={confirmarDeposito} style={{ background:'#fff', border:'none', color:'#0D9488', borderRadius:8, padding:'0 12px', fontWeight:700 }}>OK</button>
+          <button onClick={() => setDepositoAberto(false)} style={{ background:'rgba(255,255,255,0.15)', border:'none', color:'#fff', borderRadius:8, padding:'0 10px' }}>✕</button>
+        </div>
+      ) : !completa && (
+        <button onClick={() => setDepositoAberto(true)} style={{ width:'100%', padding:8, borderRadius:8, border:'1px dashed rgba(255,255,255,0.5)', background:'transparent', color:'#fff', fontWeight:600, fontSize:13 }}>💰 Depositar</button>
+      )}
     </div>
   )
 }
@@ -2263,11 +2378,77 @@ function Metas({ metas, onAdicionarMeta, onEditarMeta, onExcluirMeta, onContribu
                 <button onClick={() => { setDepositoAberto(null); setValorDeposito('') }} style={{ background:'#334155', border:'none', color:'#fff', borderRadius:8, padding:'0 10px' }}>✕</button>
               </div>
             ) : !completa && (
-              <button onClick={() => setDepositoAberto(meta.id)} style={{ width:'80%', padding:8, borderRadius:8, border:'1px dashed #22C55E', background:'transparent', color:'#22C55E', fontWeight:600, fontSize:13 }}>💰 Depositar</button>
+              <button onClick={() => setDepositoAberto(meta.id)} style={{ width:'100%', padding:8, borderRadius:8, border:'1px dashed #22C55E', background:'transparent', color:'#22C55E', fontWeight:600, fontSize:13 }}>💰 Depositar</button>
             )}
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// ---------- Componente: Relatórios ----------
+
+function Relatorios({ transacoes }) {
+  const resumo = calcularResumoMensal(transacoes, 6)
+  const maxValor = Math.max(...resumo.flatMap((m) => [m.receitas, m.despesas]), 1)
+  const chaveMesAtual = mesAtual()
+  const doMesAtual = transacoes.filter((t) => t.data.startsWith(chaveMesAtual) && t.tipo === 'despesa')
+  const porCategoria = {}
+  doMesAtual.forEach((t) => { porCategoria[t.categoria] = (porCategoria[t.categoria] || 0) + t.valor })
+  const totalDespesasMes = Object.values(porCategoria).reduce((s, v) => s + v, 0)
+  const categoriasOrdenadas = Object.entries(porCategoria).sort((a, b) => b[1] - a[1])
+  const maiorCategoria = categoriasOrdenadas[0]
+  const mesesComDados = resumo.filter((m) => m.receitas > 0 || m.despesas > 0)
+  const economiaMedia = mesesComDados.length > 0 ? mesesComDados.reduce((s, m) => s + m.saldo, 0) / mesesComDados.length : 0
+
+  function nomeMesAbrev(chave) { return NOMES_MESES[Number(chave.split('-')[1]) - 1].slice(0, 3) }
+
+  return (
+    <div style={{ padding:'8px 14px 8px', background:'#0F172A' }}>
+      <div style={{ background:'#1E293B', borderRadius:12, padding:14, marginBottom:12 }}>
+        <p style={{ color:'#94A3B8', fontSize:11, marginBottom:2 }}>Economia média mensal</p>
+        <p style={{ color: economiaMedia >= 0 ? '#22C55E' : '#EF4444', fontSize:20, fontWeight:700 }}>{formatarMoeda(economiaMedia)}</p>
+      </div>
+      {maiorCategoria && (
+        <div style={{ background:'#1E293B', borderRadius:12, padding:14, marginBottom:12 }}>
+          <p style={{ color:'#94A3B8', fontSize:11, marginBottom:2 }}>Maior gasto este mês</p>
+          <p style={{ color:'#fff', fontSize:14, fontWeight:600 }}>{infoCategoria('despesa', maiorCategoria[0]).icone} {infoCategoria('despesa', maiorCategoria[0]).label}</p>
+          <p style={{ color:'#F59E0B', fontSize:12 }}>{formatarMoeda(maiorCategoria[1])} · {totalDespesasMes > 0 ? Math.round((maiorCategoria[1] / totalDespesasMes) * 100) : 0}%</p>
+        </div>
+      )}
+      <p style={{ color:'#94A3B8', fontSize:12, marginBottom:8 }}>Receitas x Despesas — 6 meses</p>
+      <div style={{ display:'flex', alignItems:'flex-end', gap:8, height:100, background:'#1E293B', borderRadius:12, padding:'12px 10px 6px', marginBottom:12 }}>
+        {resumo.map((m) => (
+          <div key={m.chave} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', height:'100%' }}>
+            <div style={{ flex:1, display:'flex', alignItems:'flex-end', gap:2 }}>
+              <div style={{ width:8, height:`${(m.receitas/maxValor)*100}%`, minHeight: m.receitas>0?2:0, background:'#22C55E', borderRadius:3 }} />
+              <div style={{ width:8, height:`${(m.despesas/maxValor)*100}%`, minHeight: m.despesas>0?2:0, background:'#EF4444', borderRadius:3 }} />
+            </div>
+            <p style={{ color:'#64748B', fontSize:9, marginTop:4 }}>{nomeMesAbrev(m.chave)}</p>
+          </div>
+        ))}
+      </div>
+      {categoriasOrdenadas.length > 0 && (
+        <>
+          <p style={{ color:'#94A3B8', fontSize:12, marginBottom:8 }}>Categorias este mês</p>
+          {categoriasOrdenadas.map(([catId, valor]) => {
+            const cat = infoCategoria('despesa', catId)
+            const pct = totalDespesasMes > 0 ? (valor/totalDespesasMes)*100 : 0
+            return (
+              <div key={catId} style={{ marginBottom:8 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:3 }}>
+                  <span style={{ color:'#fff', fontSize:12 }}>{cat.icone} {cat.label}</span>
+                  <span style={{ color:'#94A3B8', fontSize:12 }}>{formatarMoeda(valor)}</span>
+                </div>
+                <div style={{ background:'#1E293B', borderRadius:4, height:5 }}>
+                  <div style={{ width:`${pct}%`, background:'#6366F1', height:5, borderRadius:4 }} />
+                </div>
+              </div>
+            )
+          })}
+        </>
+      )}
     </div>
   )
 }
@@ -2279,7 +2460,7 @@ function FormItemAnual({ onSalvar, onCancelar, itemInicial }) {
   const [valorEstimado, setValorEstimado] = useState(itemInicial ? String(itemInicial.valorEstimado) : '')
   const [mes, setMes] = useState(itemInicial ? String(itemInicial.mes) : '1')
   const emEdicao = Boolean(itemInicial)
-  const inputStyle = { width:'80%', padding:'12px 14px', borderRadius:10, border:'1px solid #334155', background:'#0F172A', color:'#fff', fontSize:15, marginBottom:14, boxSizing:'border-box' }
+  const inputStyle = { width:'100%', padding:'12px 14px', borderRadius:10, border:'1px solid #334155', background:'#0F172A', color:'#fff', fontSize:15, marginBottom:14, boxSizing:'border-box' }
 
   function handleSalvar() {
     if (!nome.trim() || !valorEstimado || Number(valorEstimado) <= 0) { alert('Preencha nome e valor.'); return }
@@ -2311,7 +2492,7 @@ function Planejamento({ transacoes, planejamentos, itensAnuais, onSalvarPlanejam
   const [receitaPrevista, setReceitaPrevista] = useState(planoAtual.receitaPrevista ? String(planoAtual.receitaPrevista) : '')
   const [despesaPrevista, setDespesaPrevista] = useState(planoAtual.despesaPrevista ? String(planoAtual.despesaPrevista) : '')
   const [modoFormItem, setModoFormItem] = useState(null)
-  const inputStyle = { width:'80%', padding:'12px 14px', borderRadius:10, border:'1px solid #334155', background:'#0F172A', color:'#fff', fontSize:15, marginBottom:14, boxSizing:'border-box' }
+  const inputStyle = { width:'100%', padding:'12px 14px', borderRadius:10, border:'1px solid #334155', background:'#0F172A', color:'#fff', fontSize:15, marginBottom:14, boxSizing:'border-box' }
 
   const doMes = transacoes.filter((t) => t.data.startsWith(chave))
   const receitaReal = doMes.filter((t) => t.tipo === 'receita').reduce((s, t) => s+t.valor, 0)
@@ -2332,7 +2513,7 @@ function Planejamento({ transacoes, planejamentos, itensAnuais, onSalvarPlanejam
         <label style={{ color:'#94A3B8', fontSize:13 }}>Despesa prevista (R$)</label>
         <input style={inputStyle} type="number" inputMode="decimal" placeholder="0,00" value={despesaPrevista} onChange={(e) => setDespesaPrevista(e.target.value)} />
         <button onClick={() => onSalvarPlanejamentoMes(chave, { receitaPrevista:receitaPrevNum, despesaPrevista:despesaPrevNum })}
-          style={{ width:'80%', padding:11, borderRadius:10, border:'none', background:'#6366F1', color:'#fff', fontWeight:700, marginBottom:12 }}>Salvar plano</button>
+          style={{ width:'100%', padding:11, borderRadius:10, border:'none', background:'#6366F1', color:'#fff', fontWeight:700, marginBottom:12 }}>Salvar plano</button>
         <div style={{ borderTop:'1px solid #334155', paddingTop:10 }}>
           {[['Saldo esperado', formatarMoeda(saldoEsperado), saldoEsperado>=0?'#22C55E':'#EF4444'],
             ['Receita real', formatarMoeda(receitaReal), '#22C55E'],
@@ -2594,6 +2775,7 @@ export default function App() {
         background: '#0F172A',
         fontFamily: 'system-ui, sans-serif',
         paddingBottom: 80,
+        zoom: 0.88,
       }}
     >
       {abaAtiva === 'dashboard' && (
