@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 
 const CATEGORIAS_DESPESA = [
   { id: 'mercado', label: 'Mercado', icone: '🛒' },
-  { id: 'restaurante/padaria', label: 'Outros', icone: '📦' },
+  { id: 'restaurante/padaria', label: 'Restaurante/Padaria', icone: '👩‍🍳' },
   { id: 'transporte', label: 'Transporte', icone: '🚗' },
   { id: 'lazer', label: 'Lazer', icone: '🎉' },
   { id: 'saude', label: 'Saúde', icone: '💊' },
