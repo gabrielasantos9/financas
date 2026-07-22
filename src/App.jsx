@@ -2679,8 +2679,19 @@ export default function App() {
     setAbaAtiva(novaAba)
   }
 
+  // Aplica o efeito de uma transação no saldo da conta vinculada
+  function ajustarSaldoConta(contaId, tipo, valor, sinal) {
+    // sinal: +1 para aplicar, -1 para reverter
+    if (!contaId) return
+    const delta = (tipo === 'receita' ? valor : -valor) * sinal
+    setContas((atual) =>
+      atual.map((c) => c.id === contaId ? { ...c, saldo: (c.saldo || 0) + delta } : c)
+    )
+  }
+
   function handleAdicionar(novaTransacao) {
     setTransacoes((atual) => [...atual, novaTransacao])
+    ajustarSaldoConta(novaTransacao.contaId, novaTransacao.tipo, novaTransacao.valor, +1)
     setAbaAtiva('dashboard')
   }
 
@@ -2690,6 +2701,11 @@ export default function App() {
   }
 
   function handleSalvarEdicao(transacaoAtualizada) {
+    const original = transacoes.find((t) => t.id === transacaoAtualizada.id)
+    // Reverte o efeito da transação original na conta antiga
+    if (original) ajustarSaldoConta(original.contaId, original.tipo, original.valor, -1)
+    // Aplica o efeito da nova versão na conta nova (pode ser a mesma ou diferente)
+    ajustarSaldoConta(transacaoAtualizada.contaId, transacaoAtualizada.tipo, transacaoAtualizada.valor, +1)
     setTransacoes((atual) =>
       atual.map((t) => (t.id === transacaoAtualizada.id ? transacaoAtualizada : t))
     )
@@ -2699,6 +2715,9 @@ export default function App() {
 
   function handleExcluir(id) {
     if (window.confirm('Tem certeza que deseja excluir esta transação?')) {
+      const transacao = transacoes.find((t) => t.id === id)
+      // Reverte o efeito da transação excluída no saldo da conta
+      if (transacao) ajustarSaldoConta(transacao.contaId, transacao.tipo, transacao.valor, -1)
       setTransacoes((atual) => atual.filter((t) => t.id !== id))
     }
   }
