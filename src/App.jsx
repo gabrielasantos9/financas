@@ -419,6 +419,16 @@ function salvarPreferencias(preferencias) {
   localStorage.setItem('preferencias', JSON.stringify(preferencias))
 }
 
+// Calcula o saldo atual de uma conta:
+// saldoBase (valor inicial configurado pelo usuário) + todas as transações vinculadas
+function calcularSaldoConta(conta, transacoes) {
+  const base = conta.saldoBase ?? conta.saldo ?? 0
+  const efeito = transacoes
+    .filter((t) => t.contaId === conta.id)
+    .reduce((s, t) => s + (t.tipo === 'receita' ? t.valor : -t.valor), 0)
+  return base + efeito
+}
+
 // ---------- Componente: Dashboard ----------
 
 function Dashboard({ transacoes, onEditar, onExcluir, limiteGastosMensal, contas }) {
@@ -428,15 +438,14 @@ function Dashboard({ transacoes, onEditar, onExcluir, limiteGastosMensal, contas
   const despesasMes = doMes.filter((t) => t.tipo === 'despesa').reduce((s, t) => s + t.valor, 0)
   const saldoMes = receitasMes - despesasMes
 
-  // Saldo total = soma dos saldos das contas principais (não excluídas)
-  // Pensão e Investimento ficam fora do total
-  const saldoTotal = (contas || [])
-    .filter((c) => !TIPOS_CONTA.find((t) => t.id === c.tipo)?.excluirDoSaldo && c.tipo !== 'credito')
-    .reduce((s, c) => s + (c.saldo || 0), 0)
-
+  // Saldo total = soma dos saldos calculados das contas principais
+  // Pensão e Investimento ficam separados
   const contasPrincipais = (contas || []).filter((c) => !['pensao','investimento','credito'].includes(c.tipo))
   const contasPensao = (contas || []).filter((c) => c.tipo === 'pensao')
   const contasInvest = (contas || []).filter((c) => c.tipo === 'investimento')
+
+  const saldoTotal = contasPrincipais
+    .reduce((s, c) => s + calcularSaldoConta(c, transacoes), 0)
 
   const passouDoLimite = limiteGastosMensal > 0 && despesasMes > limiteGastosMensal
 
@@ -482,10 +491,11 @@ function Dashboard({ transacoes, onEditar, onExcluir, limiteGastosMensal, contas
       {(contas || []).length > 0 && (() => {
         const renderLinha = (conta) => {
           const tipo = infoTipoConta(conta.tipo)
+          const saldoCalculado = calcularSaldoConta(conta, transacoes)
           return (
             <div key={conta.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
               <p style={{ color: '#fff', fontSize: 12 }}>{tipo.icone} {conta.nome}</p>
-              <p style={{ color: (conta.saldo || 0) >= 0 ? '#22C55E' : '#EF4444', fontSize: 12, fontWeight: 600 }}>{formatarMoeda(conta.saldo || 0)}</p>
+              <p style={{ color: saldoCalculado >= 0 ? '#22C55E' : '#EF4444', fontSize: 12, fontWeight: 600 }}>{formatarMoeda(saldoCalculado)}</p>
             </div>
           )
         }
@@ -1003,6 +1013,7 @@ function FormNovaConta({ onSalvar, onCancelar, contaInicial, filhos }) {
       nome: nome.trim(),
       tipo,
       banco: banco.trim(),
+      saldoBase: saldo !== '' ? Number(saldo) : 0,
       saldo: saldo !== '' ? Number(saldo) : 0,
       filhoId: tipo === 'pensao' ? filhoId : null,
       diaFechamento: diaFechamento ? Number(diaFechamento) : null,
@@ -1102,11 +1113,17 @@ function Contas({ contas, transacoes, onAdicionarConta, onEditarConta, onExcluir
 
   function handleSalvarFatura(conta) {
     const valor = Number(valorFaturaInput)
-    if (!valorFaturaInput || valor < 0) { alert('Digite um valor válido.'); return }
+    if (valorFaturaInput === '' || valor < 0) { alert('Digite um valor válido.'); return }
     if (conta.tipo === 'credito') {
       onEditarConta({ ...conta, faturas: { ...conta.faturas, [chaveMesAtual]: valor } })
     } else {
-      onEditarConta({ ...conta, saldo: valor })
+      // O usuário digita o saldo ATUAL que quer ver.
+      // Calculamos o saldoBase necessário para que: saldoBase + transações = valorDesejado
+      const efeitoTransacoes = transacoes
+        .filter((t) => t.contaId === conta.id)
+        .reduce((s, t) => s + (t.tipo === 'receita' ? t.valor : -t.valor), 0)
+      const novoSaldoBase = valor - efeitoTransacoes
+      onEditarConta({ ...conta, saldoBase: novoSaldoBase, saldo: valor })
     }
     setEditandoFatura(null)
     setValorFaturaInput('')
@@ -1172,9 +1189,12 @@ function Contas({ contas, transacoes, onAdicionarConta, onEditarConta, onExcluir
                 ) : (
                   <>
                     <p style={{ color: '#94A3B8', fontSize: 11 }}>Saldo atual</p>
-                    <p style={{ color: (conta.saldo || 0) >= 0 ? '#22C55E' : '#EF4444', fontSize: 20, fontWeight: 700 }}>
-                      {formatarMoeda(conta.saldo || 0)}
+                    <p style={{ color: calcularSaldoConta(conta, transacoes) >= 0 ? '#22C55E' : '#EF4444', fontSize: 20, fontWeight: 700 }}>
+                      {formatarMoeda(calcularSaldoConta(conta, transacoes))}
                     </p>
+                    {(conta.saldoBase ?? conta.saldo ?? 0) !== 0 && (
+                      <p style={{ color: '#64748B', fontSize: 10 }}>base: {formatarMoeda(conta.saldoBase ?? conta.saldo ?? 0)}</p>
+                    )}
                   </>
                 )}
               </button>
@@ -1183,7 +1203,7 @@ function Contas({ contas, transacoes, onAdicionarConta, onEditarConta, onExcluir
                 <button
                     onClick={() => {
                       setEditandoFatura(conta.id)
-                      setValorFaturaInput(ehCredito ? (faturaMes !== null ? String(faturaMes) : '') : String(conta.saldo || 0))
+                      setValorFaturaInput(ehCredito ? (faturaMes !== null ? String(faturaMes) : '') : String(calcularSaldoConta(conta, transacoes)))
                     }}
                     style={{ flex: 1, padding: 8, borderRadius: 8, border: 'none', background: ehCredito ? 'rgba(255,255,255,0.2)' : '#0F172A', color: '#fff', fontWeight: 600, fontSize: 12 }}
                   >
@@ -2679,19 +2699,8 @@ export default function App() {
     setAbaAtiva(novaAba)
   }
 
-  // Aplica o efeito de uma transação no saldo da conta vinculada
-  function ajustarSaldoConta(contaId, tipo, valor, sinal) {
-    // sinal: +1 para aplicar, -1 para reverter
-    if (!contaId) return
-    const delta = (tipo === 'receita' ? valor : -valor) * sinal
-    setContas((atual) =>
-      atual.map((c) => c.id === contaId ? { ...c, saldo: (c.saldo || 0) + delta } : c)
-    )
-  }
-
   function handleAdicionar(novaTransacao) {
     setTransacoes((atual) => [...atual, novaTransacao])
-    ajustarSaldoConta(novaTransacao.contaId, novaTransacao.tipo, novaTransacao.valor, +1)
     setAbaAtiva('dashboard')
   }
 
@@ -2701,11 +2710,6 @@ export default function App() {
   }
 
   function handleSalvarEdicao(transacaoAtualizada) {
-    const original = transacoes.find((t) => t.id === transacaoAtualizada.id)
-    // Reverte o efeito da transação original na conta antiga
-    if (original) ajustarSaldoConta(original.contaId, original.tipo, original.valor, -1)
-    // Aplica o efeito da nova versão na conta nova (pode ser a mesma ou diferente)
-    ajustarSaldoConta(transacaoAtualizada.contaId, transacaoAtualizada.tipo, transacaoAtualizada.valor, +1)
     setTransacoes((atual) =>
       atual.map((t) => (t.id === transacaoAtualizada.id ? transacaoAtualizada : t))
     )
@@ -2715,9 +2719,6 @@ export default function App() {
 
   function handleExcluir(id) {
     if (window.confirm('Tem certeza que deseja excluir esta transação?')) {
-      const transacao = transacoes.find((t) => t.id === id)
-      // Reverte o efeito da transação excluída no saldo da conta
-      if (transacao) ajustarSaldoConta(transacao.contaId, transacao.tipo, transacao.valor, -1)
       setTransacoes((atual) => atual.filter((t) => t.id !== id))
     }
   }
