@@ -422,34 +422,33 @@ function salvarPreferencias(preferencias) {
 // ---------- Componente: Dashboard ----------
 
 function Dashboard({ transacoes, onEditar, onExcluir, limiteGastosMensal, contas }) {
-  const hojeStr = new Date().toISOString().slice(0, 10)
   const doMes = transacoes.filter((t) => t.data.startsWith(mesAtual()))
 
   const receitasMes = doMes.filter((t) => t.tipo === 'receita').reduce((s, t) => s + t.valor, 0)
   const despesasMes = doMes.filter((t) => t.tipo === 'despesa').reduce((s, t) => s + t.valor, 0)
   const saldoMes = receitasMes - despesasMes
 
-  // Saldo total exclui contas marcadas como excluirDoSaldo (pensão, investimento, alimentação, crédito)
-  const contasExcluidas = new Set(
-    (contas || [])
-      .filter((c) => TIPOS_CONTA.find((t) => t.id === c.tipo)?.excluirDoSaldo)
-      .map((c) => c.id)
-  )
-  const saldoAcumulado = transacoes
-    .filter((t) => t.data <= hojeStr && !contasExcluidas.has(t.contaId))
-    .reduce((s, t) => s + (t.tipo === 'receita' ? t.valor : -t.valor), 0)
+  // Saldo total = soma dos saldos das contas principais (não excluídas)
+  // Pensão e Investimento ficam fora do total
+  const saldoTotal = (contas || [])
+    .filter((c) => !TIPOS_CONTA.find((t) => t.id === c.tipo)?.excluirDoSaldo && c.tipo !== 'credito')
+    .reduce((s, c) => s + (c.saldo || 0), 0)
 
-  // Saldo por conta (excluindo crédito, que usa fatura)
-  const contasComSaldo = (contas || []).filter((c) => {
-    const tipo = TIPOS_CONTA.find((t) => t.id === c.tipo)
-    return tipo && c.tipo !== 'credito'
-  })
+  const contasPrincipais = (contas || []).filter((c) => !['pensao','investimento','credito'].includes(c.tipo))
+  const contasPensao = (contas || []).filter((c) => c.tipo === 'pensao')
+  const contasInvest = (contas || []).filter((c) => c.tipo === 'investimento')
 
   const passouDoLimite = limiteGastosMensal > 0 && despesasMes > limiteGastosMensal
 
-  const ultimasTransacoes = [...doMes]
+  // Mostra as últimas 8 transações dos últimos 30 dias (não só mês atual)
+  const hoje = new Date()
+  const ha30Dias = new Date(hoje)
+  ha30Dias.setDate(hoje.getDate() - 30)
+  const ha30DiasStr = ha30Dias.toISOString().slice(0, 10)
+  const ultimasTransacoes = [...transacoes]
+    .filter((t) => t.data >= ha30DiasStr)
     .sort((a, b) => new Date(b.data) - new Date(a.data))
-    .slice(0, 5)
+    .slice(0, 8)
 
   return (
     <div style={{ padding: '8px 14px 8px', background: '#0F172A' }}>
@@ -463,8 +462,8 @@ function Dashboard({ transacoes, onEditar, onExcluir, limiteGastosMensal, contas
       {/* Card principal */}
       <div style={{ background: 'linear-gradient(135deg, #6366F1, #4F46E5)', borderRadius: 14, padding: '14px 16px', marginBottom: 10 }}>
         <p style={{ color: '#E0E7FF', fontSize: 11, marginBottom: 2 }}>Saldo disponível</p>
-        <p style={{ color: '#fff', fontSize: 26, fontWeight: 700, marginBottom: 4 }}>{formatarMoeda(saldoAcumulado)}</p>
-        <p style={{ color: '#E0E7FF', fontSize: 11 }}>Este mês: {saldoMes >= 0 ? '+' : ''}{formatarMoeda(saldoMes)}</p>
+        <p style={{ color: '#fff', fontSize: 26, fontWeight: 700, marginBottom: 4 }}>{formatarMoeda(saldoTotal)}</p>
+        <p style={{ color: '#E0E7FF', fontSize: 11 }}>Este mês: receitas {formatarMoeda(receitasMes)} · despesas {formatarMoeda(despesasMes)}</p>
       </div>
 
       {/* Receitas e Despesas */}
@@ -480,25 +479,16 @@ function Dashboard({ transacoes, onEditar, onExcluir, limiteGastosMensal, contas
       </div>
 
       {/* Saldo por conta */}
-      {contasComSaldo.length > 0 && (() => {
-        const contasPrincipais = contasComSaldo.filter((c) => !['pensao','investimento'].includes(c.tipo))
-        const contasPensao = contasComSaldo.filter((c) => c.tipo === 'pensao')
-        const contasInvest = contasComSaldo.filter((c) => c.tipo === 'investimento')
-
+      {(contas || []).length > 0 && (() => {
         const renderLinha = (conta) => {
           const tipo = infoTipoConta(conta.tipo)
-          const saldo = transacoes
-            .filter((t) => t.contaId === conta.id && t.data <= hojeStr)
-            .reduce((s, t) => s + (t.tipo === 'receita' ? t.valor : -t.valor), 0)
-          const filho = conta.filhoId ? (contas.find ? null : null) : null
           return (
             <div key={conta.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
               <p style={{ color: '#fff', fontSize: 12 }}>{tipo.icone} {conta.nome}</p>
-              <p style={{ color: saldo >= 0 ? '#22C55E' : '#EF4444', fontSize: 12, fontWeight: 600 }}>{formatarMoeda(saldo)}</p>
+              <p style={{ color: (conta.saldo || 0) >= 0 ? '#22C55E' : '#EF4444', fontSize: 12, fontWeight: 600 }}>{formatarMoeda(conta.saldo || 0)}</p>
             </div>
           )
         }
-
         return (
           <>
             {contasPrincipais.length > 0 && (
@@ -509,13 +499,13 @@ function Dashboard({ transacoes, onEditar, onExcluir, limiteGastosMensal, contas
             )}
             {contasPensao.length > 0 && (
               <div style={{ background: '#1E293B', borderRadius: 12, padding: '10px 12px', marginBottom: 10 }}>
-                <p style={{ color: '#94A3B8', fontSize: 11, marginBottom: 8 }}>👶 Pensão dos filhos <span style={{ fontSize: 10, color: '#64748B' }}>(não entra no seu saldo)</span></p>
+                <p style={{ color: '#94A3B8', fontSize: 11, marginBottom: 8 }}>👶 Pensão dos filhos <span style={{ fontSize: 10, color: '#64748B' }}>(separado)</span></p>
                 {contasPensao.map(renderLinha)}
               </div>
             )}
             {contasInvest.length > 0 && (
               <div style={{ background: '#1E293B', borderRadius: 12, padding: '10px 12px', marginBottom: 10 }}>
-                <p style={{ color: '#94A3B8', fontSize: 11, marginBottom: 8 }}>📈 Investimentos <span style={{ fontSize: 10, color: '#64748B' }}>(não entra no saldo)</span></p>
+                <p style={{ color: '#94A3B8', fontSize: 11, marginBottom: 8 }}>📈 Investimentos <span style={{ fontSize: 10, color: '#64748B' }}>(separado)</span></p>
                 {contasInvest.map(renderLinha)}
               </div>
             )}
@@ -989,6 +979,7 @@ function FormNovaConta({ onSalvar, onCancelar, contaInicial, filhos }) {
   const [nome, setNome] = useState(contaInicial?.nome || '')
   const [tipo, setTipo] = useState(contaInicial?.tipo || 'corrente')
   const [banco, setBanco] = useState(contaInicial?.banco || '')
+  const [saldo, setSaldo] = useState(contaInicial?.saldo != null ? String(contaInicial.saldo) : '')
   const [filhoId, setFilhoId] = useState(contaInicial?.filhoId || '')
   const [diaFechamento, setDiaFechamento] = useState(contaInicial?.diaFechamento ? String(contaInicial.diaFechamento) : '')
   const [diaVencimento, setDiaVencimento] = useState(contaInicial?.diaVencimento ? String(contaInicial.diaVencimento) : '')
@@ -1012,6 +1003,7 @@ function FormNovaConta({ onSalvar, onCancelar, contaInicial, filhos }) {
       nome: nome.trim(),
       tipo,
       banco: banco.trim(),
+      saldo: saldo !== '' ? Number(saldo) : 0,
       filhoId: tipo === 'pensao' ? filhoId : null,
       diaFechamento: diaFechamento ? Number(diaFechamento) : null,
       diaVencimento: diaVencimento ? Number(diaVencimento) : null,
@@ -1060,6 +1052,15 @@ function FormNovaConta({ onSalvar, onCancelar, contaInicial, filhos }) {
       <label style={{ color: '#94A3B8', fontSize: 13 }}>Banco / Operadora (opcional)</label>
       <input style={inputStyle} placeholder="Ex: Nubank, Sodexo..." value={banco} onChange={(e) => setBanco(e.target.value)} />
 
+      {tipo !== 'credito' && (
+        <>
+          <label style={{ color: '#94A3B8', fontSize: 13 }}>
+            {tipo === 'pensao' ? 'Saldo atual da pensão (R$)' : tipo === 'investimento' ? 'Valor investido (R$)' : 'Saldo atual (R$)'}
+          </label>
+          <input style={inputStyle} type="number" inputMode="decimal" placeholder="0,00" value={saldo} onChange={(e) => setSaldo(e.target.value)} />
+        </>
+      )}
+
       {ehCredito && (
         <div style={{ display: 'flex', gap: 10 }}>
           <div style={{ flex: 1 }}>
@@ -1099,16 +1100,14 @@ function Contas({ contas, transacoes, onAdicionarConta, onEditarConta, onExcluir
     return Math.ceil((alvo - hoje) / (1000 * 60 * 60 * 24))
   }
 
-  function saldoConta(conta) {
-    return transacoes
-      .filter((t) => t.contaId === conta.id)
-      .reduce((s, t) => s + (t.tipo === 'receita' ? t.valor : -t.valor), 0)
-  }
-
   function handleSalvarFatura(conta) {
     const valor = Number(valorFaturaInput)
     if (!valorFaturaInput || valor < 0) { alert('Digite um valor válido.'); return }
-    onEditarConta({ ...conta, faturas: { ...conta.faturas, [chaveMesAtual]: valor } })
+    if (conta.tipo === 'credito') {
+      onEditarConta({ ...conta, faturas: { ...conta.faturas, [chaveMesAtual]: valor } })
+    } else {
+      onEditarConta({ ...conta, saldo: valor })
+    }
     setEditandoFatura(null)
     setValorFaturaInput('')
   }
@@ -1136,7 +1135,6 @@ function Contas({ contas, transacoes, onAdicionarConta, onEditarConta, onExcluir
       {contas.map((conta) => {
         const info = infoTipoConta(conta.tipo)
         const ehCredito = conta.tipo === 'credito'
-        const saldo = ehCredito ? null : saldoConta(conta)
         const faturaMes = ehCredito ? (conta.faturas?.[chaveMesAtual] ?? null) : null
         const expandida = contaExpandida === conta.id
         const cores = corDoBanco(conta.banco || conta.nome)
@@ -1173,23 +1171,24 @@ function Contas({ contas, transacoes, onAdicionarConta, onEditarConta, onExcluir
                   </>
                 ) : (
                   <>
-                    <p style={{ color: '#94A3B8', fontSize: 11 }}>Saldo (transações vinculadas)</p>
-                    <p style={{ color: saldo >= 0 ? '#22C55E' : '#EF4444', fontSize: 20, fontWeight: 700 }}>
-                      {formatarMoeda(saldo)}
+                    <p style={{ color: '#94A3B8', fontSize: 11 }}>Saldo atual</p>
+                    <p style={{ color: (conta.saldo || 0) >= 0 ? '#22C55E' : '#EF4444', fontSize: 20, fontWeight: 700 }}>
+                      {formatarMoeda(conta.saldo || 0)}
                     </p>
                   </>
                 )}
               </button>
 
               <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-                {ehCredito && (
-                  <button
-                    onClick={() => { setEditandoFatura(conta.id); setValorFaturaInput(faturaMes !== null ? String(faturaMes) : '') }}
-                    style={{ flex: 1, padding: 8, borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.2)', color: '#fff', fontWeight: 600, fontSize: 12 }}
+                <button
+                    onClick={() => {
+                      setEditandoFatura(conta.id)
+                      setValorFaturaInput(ehCredito ? (faturaMes !== null ? String(faturaMes) : '') : String(conta.saldo || 0))
+                    }}
+                    style={{ flex: 1, padding: 8, borderRadius: 8, border: 'none', background: ehCredito ? 'rgba(255,255,255,0.2)' : '#0F172A', color: '#fff', fontWeight: 600, fontSize: 12 }}
                   >
-                    💳 Atualizar fatura
+                    {ehCredito ? '💳 Atualizar fatura' : '✏️ Atualizar saldo'}
                   </button>
-                )}
                 <button onClick={() => setModoForm(conta)} style={{ padding: 8, borderRadius: 8, border: 'none', background: ehCredito ? 'rgba(255,255,255,0.15)' : '#0F172A', color: '#fff', fontSize: 13 }}>✏️</button>
                 <button
                   onClick={() => { if (window.confirm(`Excluir "${conta.nome}"?`)) onExcluirConta(conta.id) }}
