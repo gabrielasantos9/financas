@@ -17,9 +17,11 @@ const CATEGORIAS_DESPESA = [
 
 const CATEGORIAS_RECEITA = [
   { id: 'salario', label: 'Salário', icone: '💼' },
+  { id: 'pensao', label: 'Pensão', icone: '👶' },
   { id: 'freela', label: 'Freelance', icone: '💻' },
   { id: 'pix', label: 'Pix recebido', icone: '📲' },
   { id: 'rendimento', label: 'Rendimento', icone: '📈' },
+  { id: 'investimento', label: 'Rendimento de investimento', icone: '📈' },
   { id: 'outros', label: 'Outros', icone: '📦' },
 ]
 
@@ -174,7 +176,7 @@ const TIPOS_CONTA = [
   { id: 'corrente',     label: 'Conta Corrente',        icone: '🏦', excluirDoSaldo: false },
   { id: 'poupanca',     label: 'Poupança',               icone: '💰', excluirDoSaldo: false },
   { id: 'debito',       label: 'Cartão de Débito',       icone: '💳', excluirDoSaldo: false },
-  { id: 'alimentacao',  label: 'Alimentação / Refeição', icone: '🍽️', excluirDoSaldo: true  },
+  { id: 'alimentacao',  label: 'Alimentação / Refeição', icone: '🍽️', excluirDoSaldo: false },
   { id: 'credito',      label: 'Cartão de Crédito',      icone: '💜', excluirDoSaldo: true  },
   { id: 'dinheiro',     label: 'Dinheiro',               icone: '💵', excluirDoSaldo: false },
   { id: 'pensao',       label: 'Pensão',                 icone: '👶', excluirDoSaldo: true  },
@@ -478,28 +480,48 @@ function Dashboard({ transacoes, onEditar, onExcluir, limiteGastosMensal, contas
       </div>
 
       {/* Saldo por conta */}
-      {contasComSaldo.length > 0 && (
-        <div style={{ background: '#1E293B', borderRadius: 12, padding: '10px 12px', marginBottom: 10 }}>
-          <p style={{ color: '#94A3B8', fontSize: 11, marginBottom: 8 }}>Saldo por conta</p>
-          {contasComSaldo.map((conta) => {
-            const tipo = infoTipoConta(conta.tipo)
-            const saldo = transacoes
-              .filter((t) => t.contaId === conta.id && t.data <= hojeStr)
-              .reduce((s, t) => s + (t.tipo === 'receita' ? t.valor : -t.valor), 0)
-            const excluida = contasExcluidas.has(conta.id)
-            return (
-              <div key={conta.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <p style={{ color: excluida ? '#64748B' : '#fff', fontSize: 12 }}>
-                  {tipo.icone} {conta.nome} {excluida && <span style={{ fontSize: 10, color: '#64748B' }}>(separado)</span>}
-                </p>
-                <p style={{ color: saldo >= 0 ? '#22C55E' : '#EF4444', fontSize: 12, fontWeight: 600 }}>
-                  {formatarMoeda(saldo)}
-                </p>
+      {contasComSaldo.length > 0 && (() => {
+        const contasPrincipais = contasComSaldo.filter((c) => !['pensao','investimento'].includes(c.tipo))
+        const contasPensao = contasComSaldo.filter((c) => c.tipo === 'pensao')
+        const contasInvest = contasComSaldo.filter((c) => c.tipo === 'investimento')
+
+        const renderLinha = (conta) => {
+          const tipo = infoTipoConta(conta.tipo)
+          const saldo = transacoes
+            .filter((t) => t.contaId === conta.id && t.data <= hojeStr)
+            .reduce((s, t) => s + (t.tipo === 'receita' ? t.valor : -t.valor), 0)
+          const filho = conta.filhoId ? (contas.find ? null : null) : null
+          return (
+            <div key={conta.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+              <p style={{ color: '#fff', fontSize: 12 }}>{tipo.icone} {conta.nome}</p>
+              <p style={{ color: saldo >= 0 ? '#22C55E' : '#EF4444', fontSize: 12, fontWeight: 600 }}>{formatarMoeda(saldo)}</p>
+            </div>
+          )
+        }
+
+        return (
+          <>
+            {contasPrincipais.length > 0 && (
+              <div style={{ background: '#1E293B', borderRadius: 12, padding: '10px 12px', marginBottom: 10 }}>
+                <p style={{ color: '#94A3B8', fontSize: 11, marginBottom: 8 }}>Minhas contas</p>
+                {contasPrincipais.map(renderLinha)}
               </div>
-            )
-          })}
-        </div>
-      )}
+            )}
+            {contasPensao.length > 0 && (
+              <div style={{ background: '#1E293B', borderRadius: 12, padding: '10px 12px', marginBottom: 10 }}>
+                <p style={{ color: '#94A3B8', fontSize: 11, marginBottom: 8 }}>👶 Pensão dos filhos <span style={{ fontSize: 10, color: '#64748B' }}>(não entra no seu saldo)</span></p>
+                {contasPensao.map(renderLinha)}
+              </div>
+            )}
+            {contasInvest.length > 0 && (
+              <div style={{ background: '#1E293B', borderRadius: 12, padding: '10px 12px', marginBottom: 10 }}>
+                <p style={{ color: '#94A3B8', fontSize: 11, marginBottom: 8 }}>📈 Investimentos <span style={{ fontSize: 10, color: '#64748B' }}>(não entra no saldo)</span></p>
+                {contasInvest.map(renderLinha)}
+              </div>
+            )}
+          </>
+        )
+      })()}
 
       {/* Últimas transações */}
       <p style={{ color: '#94A3B8', fontSize: 12, marginBottom: 6 }}>Últimas transações</p>
@@ -596,7 +618,7 @@ function Adicionar({ onAdicionar, onEditar, onCancelarEdicao, transacaoInicial, 
   }
 
   return (
-    <div style={{ padding: 16, background: '#0F172A', minHeight: '100vh' }}>
+    <div style={{ padding: 16, background: '#0F172A', minHeight: '100vh', paddingTop: 'max(env(safe-area-inset-top,0px),52px)' }}>
       <h1 style={{ fontSize: 18, marginBottom: 16, color: '#fff' }}>
         {emEdicao ? 'Editar transação' : 'Nova transação'}
       </h1>
@@ -963,10 +985,11 @@ function Calendario({ transacoes }) {
 
 // ---------- Componente: Formulário Nova Conta ----------
 
-function FormNovaConta({ onSalvar, onCancelar, contaInicial }) {
+function FormNovaConta({ onSalvar, onCancelar, contaInicial, filhos }) {
   const [nome, setNome] = useState(contaInicial?.nome || '')
   const [tipo, setTipo] = useState(contaInicial?.tipo || 'corrente')
   const [banco, setBanco] = useState(contaInicial?.banco || '')
+  const [filhoId, setFilhoId] = useState(contaInicial?.filhoId || '')
   const [diaFechamento, setDiaFechamento] = useState(contaInicial?.diaFechamento ? String(contaInicial.diaFechamento) : '')
   const [diaVencimento, setDiaVencimento] = useState(contaInicial?.diaVencimento ? String(contaInicial.diaVencimento) : '')
 
@@ -989,6 +1012,7 @@ function FormNovaConta({ onSalvar, onCancelar, contaInicial }) {
       nome: nome.trim(),
       tipo,
       banco: banco.trim(),
+      filhoId: tipo === 'pensao' ? filhoId : null,
       diaFechamento: diaFechamento ? Number(diaFechamento) : null,
       diaVencimento: diaVencimento ? Number(diaVencimento) : null,
       faturas: contaInicial?.faturas || {},
@@ -1019,7 +1043,19 @@ function FormNovaConta({ onSalvar, onCancelar, contaInicial }) {
       </div>
 
       <label style={{ color: '#94A3B8', fontSize: 13 }}>Nome</label>
-      <input style={inputStyle} placeholder="Ex: Nubank, Caixa, VA..." value={nome} onChange={(e) => setNome(e.target.value)} />
+      <input style={inputStyle} placeholder="Ex: Pensão Sofia, Nubank..." value={nome} onChange={(e) => setNome(e.target.value)} />
+
+      {tipo === 'pensao' && filhos && filhos.length > 0 && (
+        <>
+          <label style={{ color: '#94A3B8', fontSize: 13 }}>Referente a qual filho(a)?</label>
+          <select style={inputStyle} value={filhoId} onChange={(e) => setFilhoId(e.target.value)}>
+            <option value="">Não especificar</option>
+            {filhos.map((f) => (
+              <option key={f.id} value={f.id}>{f.icone} {f.nome}</option>
+            ))}
+          </select>
+        </>
+      )}
 
       <label style={{ color: '#94A3B8', fontSize: 13 }}>Banco / Operadora (opcional)</label>
       <input style={inputStyle} placeholder="Ex: Nubank, Sodexo..." value={banco} onChange={(e) => setBanco(e.target.value)} />
@@ -1047,7 +1083,7 @@ function FormNovaConta({ onSalvar, onCancelar, contaInicial }) {
 
 // ---------- Componente: Contas e Cartões ----------
 
-function Contas({ contas, transacoes, onAdicionarConta, onEditarConta, onExcluirConta }) {
+function Contas({ contas, transacoes, onAdicionarConta, onEditarConta, onExcluirConta, filhos }) {
   const [modoForm, setModoForm] = useState(null)
   const [contaExpandida, setContaExpandida] = useState(null)
   const [editandoFatura, setEditandoFatura] = useState(null)
@@ -1078,7 +1114,7 @@ function Contas({ contas, transacoes, onAdicionarConta, onEditarConta, onExcluir
   }
 
   return (
-    <div style={{ padding: '8px 14px', background: '#0F172A', minHeight: '100vh' }}>
+    <div style={{ padding: '8px 14px', background: '#0F172A', minHeight: '100vh', paddingTop: 'max(env(safe-area-inset-top,0px),52px)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <h1 style={{ fontSize: 18, color: '#fff' }}>Contas e Cartões</h1>
         {!modoForm && (
@@ -1087,10 +1123,10 @@ function Contas({ contas, transacoes, onAdicionarConta, onEditarConta, onExcluir
       </div>
 
       {modoForm === 'novo' && (
-        <FormNovaConta onSalvar={(c) => { onAdicionarConta(c); setModoForm(null) }} onCancelar={() => setModoForm(null)} />
+        <FormNovaConta filhos={filhos} onSalvar={(c) => { onAdicionarConta(c); setModoForm(null) }} onCancelar={() => setModoForm(null)} />
       )}
       {modoForm && modoForm !== 'novo' && (
-        <FormNovaConta contaInicial={modoForm} onSalvar={(c) => { onEditarConta(c); setModoForm(null) }} onCancelar={() => setModoForm(null)} />
+        <FormNovaConta filhos={filhos} contaInicial={modoForm} onSalvar={(c) => { onEditarConta(c); setModoForm(null) }} onCancelar={() => setModoForm(null)} />
       )}
 
       {contas.length === 0 && !modoForm && (
@@ -1319,7 +1355,7 @@ function Filhos({ filhos, transacoes, onAdicionarFilho, onEditarFilho, onExcluir
   const [filhoExpandido, setFilhoExpandido] = useState(null)
 
   return (
-    <div style={{ padding: 16, background: '#0F172A', minHeight: '100vh' }}>
+    <div style={{ padding: 16, background: '#0F172A', minHeight: '100vh', paddingTop: 'max(env(safe-area-inset-top,0px),52px)' }}>
       <button
         onClick={onVoltar}
         style={{ background: 'transparent', border: 'none', color: '#94A3B8', fontSize: 14, marginBottom: 12, padding: 0 }}
@@ -1484,7 +1520,7 @@ function Assistente({ transacoes, metas, reserva, contas, onVoltar }) {
   }
 
   return (
-    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', minHeight: '100vh', boxSizing: 'border-box', background: '#0F172A' }}>
+    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', minHeight: '100vh', boxSizing: 'border-box', background: '#0F172A', paddingTop: 'max(env(safe-area-inset-top,0px),52px)' }}>
       <button
         onClick={onVoltar}
         style={{ background: 'transparent', border: 'none', color: '#94A3B8', fontSize: 14, marginBottom: 12, padding: 0 }}
@@ -1741,7 +1777,7 @@ function Configuracoes({ segurancaConfig, onSalvarSeguranca, onRemoverSeguranca,
   }
 
   return (
-    <div style={{ padding: 16, background: '#0F172A', minHeight: '100vh' }}>
+    <div style={{ padding: 16, background: '#0F172A', minHeight: '100vh', paddingTop: 'max(env(safe-area-inset-top,0px),52px)' }}>
       <button
         onClick={onVoltar}
         style={{ background: 'transparent', border: 'none', color: '#94A3B8', fontSize: 14, marginBottom: 12, padding: 0 }}
@@ -2336,7 +2372,7 @@ function Metas({ metas, onAdicionarMeta, onEditarMeta, onExcluirMeta, onContribu
   }
 
   return (
-    <div style={{ padding:'8px 14px', background:'#0F172A', minHeight:'100vh' }}>
+    <div style={{ padding:'8px 14px', background:'#0F172A', minHeight:'100vh', paddingTop:'max(env(safe-area-inset-top,0px),52px)' }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
         <h1 style={{ fontSize:18, color:'#fff' }}>Metas</h1>
         {!modoForm && <button onClick={() => setModoForm('novo')} style={{ background:'#6366F1', border:'none', color:'#fff', borderRadius:8, padding:'7px 12px', fontSize:13, fontWeight:600 }}>+ Meta</button>}
@@ -2503,7 +2539,7 @@ function Planejamento({ transacoes, planejamentos, itensAnuais, onSalvarPlanejam
   const mesAtualNum = new Date().getMonth() + 1
 
   return (
-    <div style={{ padding:'8px 14px', background:'#0F172A', minHeight:'100vh' }}>
+    <div style={{ padding:'8px 14px', background:'#0F172A', minHeight:'100vh', paddingTop:'max(env(safe-area-inset-top,0px),52px)' }}>
       <button onClick={onVoltar} style={{ background:'transparent', border:'none', color:'#94A3B8', fontSize:14, marginBottom:10, padding:0 }}>‹ Voltar</button>
       <h1 style={{ fontSize:18, color:'#fff', marginBottom:14 }}>📋 Planejamento</h1>
       <p style={{ color:'#94A3B8', fontSize:12, marginBottom:8 }}>Mês atual — {NOMES_MESES[mesAtualNum-1]}</p>
@@ -2840,6 +2876,7 @@ export default function App() {
           onAdicionarConta={handleAdicionarConta}
           onEditarConta={handleEditarConta}
           onExcluirConta={handleExcluirConta}
+          filhos={filhos}
         />
       )}
       {abaAtiva === 'metas' && (
