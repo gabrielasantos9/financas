@@ -419,16 +419,6 @@ function salvarPreferencias(preferencias) {
   localStorage.setItem('preferencias', JSON.stringify(preferencias))
 }
 
-// Calcula o saldo atual de uma conta:
-// saldoBase (valor inicial configurado pelo usuário) + todas as transações vinculadas
-function calcularSaldoConta(conta, transacoes) {
-  const base = conta.saldoBase ?? conta.saldo ?? 0
-  const efeito = transacoes
-    .filter((t) => t.contaId === conta.id)
-    .reduce((s, t) => s + (t.tipo === 'receita' ? t.valor : -t.valor), 0)
-  return base + efeito
-}
-
 // ---------- Componente: Dashboard ----------
 
 function Dashboard({ transacoes, onEditar, onExcluir, limiteGastosMensal, contas }) {
@@ -438,14 +428,12 @@ function Dashboard({ transacoes, onEditar, onExcluir, limiteGastosMensal, contas
   const despesasMes = doMes.filter((t) => t.tipo === 'despesa').reduce((s, t) => s + t.valor, 0)
   const saldoMes = receitasMes - despesasMes
 
-  // Saldo total = soma dos saldos calculados das contas principais
+  // Saldo total = soma direta de conta.saldo das contas principais
   // Pensão e Investimento ficam separados
   const contasPrincipais = (contas || []).filter((c) => !['pensao','investimento','credito'].includes(c.tipo))
   const contasPensao = (contas || []).filter((c) => c.tipo === 'pensao')
   const contasInvest = (contas || []).filter((c) => c.tipo === 'investimento')
-
-  const saldoTotal = contasPrincipais
-    .reduce((s, c) => s + calcularSaldoConta(c, transacoes), 0)
+  const saldoTotal = contasPrincipais.reduce((s, c) => s + (c.saldo || 0), 0)
 
   const passouDoLimite = limiteGastosMensal > 0 && despesasMes > limiteGastosMensal
 
@@ -491,11 +479,11 @@ function Dashboard({ transacoes, onEditar, onExcluir, limiteGastosMensal, contas
       {(contas || []).length > 0 && (() => {
         const renderLinha = (conta) => {
           const tipo = infoTipoConta(conta.tipo)
-          const saldoCalculado = calcularSaldoConta(conta, transacoes)
+          const s = conta.saldo || 0
           return (
             <div key={conta.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
               <p style={{ color: '#fff', fontSize: 12 }}>{tipo.icone} {conta.nome}</p>
-              <p style={{ color: saldoCalculado >= 0 ? '#22C55E' : '#EF4444', fontSize: 12, fontWeight: 600 }}>{formatarMoeda(saldoCalculado)}</p>
+              <p style={{ color: s >= 0 ? '#22C55E' : '#EF4444', fontSize: 12, fontWeight: 600 }}>{formatarMoeda(s)}</p>
             </div>
           )
         }
@@ -1093,13 +1081,74 @@ function FormNovaConta({ onSalvar, onCancelar, contaInicial, filhos }) {
   )
 }
 
+// ---------- Componente: Card de Lançamento Rápido ----------
+
+function LancamentoRapido({ conta, tipo, onConfirmar, onCancelar }) {
+  const [descricao, setDescricao] = useState('')
+  const [valor, setValor] = useState('')
+  const [categoria, setCategoria] = useState(tipo === 'receita' ? CATEGORIAS_RECEITA[0].id : CATEGORIAS_DESPESA[0].id)
+  const [data, setData] = useState(new Date().toISOString().slice(0, 10))
+
+  const inputStyle = {
+    width: '100%', padding: '10px 12px', borderRadius: 10,
+    border: '1px solid #334155', background: '#0F172A',
+    color: '#fff', fontSize: 13, marginBottom: 8, boxSizing: 'border-box',
+  }
+
+  function confirmar() {
+    const v = Number(valor)
+    if (!descricao.trim() || !v || v <= 0) { alert('Preencha descrição e valor.'); return }
+    onConfirmar({ descricao: descricao.trim(), valor: v, categoria, data })
+  }
+
+  return (
+    <div style={{ background: '#0F172A', borderRadius: 12, padding: 12, marginTop: 8 }}>
+      <p style={{ color: tipo === 'receita' ? '#22C55E' : '#EF4444', fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+        {tipo === 'receita' ? '+ Receita' : '- Despesa'} em {conta.nome}
+      </p>
+      <label style={{ color: '#94A3B8', fontSize: 12 }}>Descrição</label>
+      <input style={inputStyle} placeholder={tipo === 'receita' ? 'Ex: Salário, Pensão...' : 'Ex: Mercado, Conta...'} value={descricao} onChange={(e) => setDescricao(e.target.value)} />
+      <label style={{ color: '#94A3B8', fontSize: 12 }}>Valor (R$)</label>
+      <input style={inputStyle} type="number" inputMode="decimal" placeholder="0,00" value={valor} onChange={(e) => setValor(e.target.value)} />
+      <label style={{ color: '#94A3B8', fontSize: 12 }}>Categoria</label>
+      <select style={inputStyle} value={categoria} onChange={(e) => setCategoria(e.target.value)}>
+        {(tipo === 'receita' ? CATEGORIAS_RECEITA : CATEGORIAS_DESPESA).map((c) => (
+          <option key={c.id} value={c.id}>{c.icone} {c.label}</option>
+        ))}
+      </select>
+      <label style={{ color: '#94A3B8', fontSize: 12 }}>Data</label>
+      <input style={inputStyle} type="date" value={data} onChange={(e) => setData(e.target.value)} />
+      <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+        <button onClick={onCancelar} style={{ flex: 1, padding: 10, borderRadius: 10, border: 'none', background: '#334155', color: '#fff', fontWeight: 600, fontSize: 13 }}>Cancelar</button>
+        <button onClick={confirmar} style={{ flex: 1, padding: 10, borderRadius: 10, border: 'none', background: tipo === 'receita' ? '#22C55E' : '#EF4444', color: '#fff', fontWeight: 700, fontSize: 13 }}>Confirmar</button>
+      </div>
+    </div>
+  )
+}
+
+// ---------- Componente: Card de Saldo Editável ----------
+
+function EditarSaldoInput({ saldoAtual, onConfirmar, onCancelar }) {
+  const [valor, setValor] = useState(String(saldoAtual || 0))
+  return (
+    <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+      <input
+        autoFocus type="number" inputMode="decimal" placeholder="Saldo atual"
+        value={valor} onChange={(e) => setValor(e.target.value)}
+        style={{ flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.15)', color: '#fff', fontSize: 14 }}
+      />
+      <button onClick={() => onConfirmar(valor)} style={{ background: '#fff', border: 'none', color: '#4F46E5', borderRadius: 10, padding: '0 14px', fontWeight: 700 }}>OK</button>
+      <button onClick={onCancelar} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: 10, padding: '0 10px' }}>✕</button>
+    </div>
+  )
+}
+
 // ---------- Componente: Contas e Cartões ----------
 
-function Contas({ contas, transacoes, onAdicionarConta, onEditarConta, onExcluirConta, filhos }) {
+function Contas({ contas, onAdicionarConta, onEditarConta, onExcluirConta, onAdicionarTransacao, filhos }) {
   const [modoForm, setModoForm] = useState(null)
-  const [contaExpandida, setContaExpandida] = useState(null)
-  const [editandoFatura, setEditandoFatura] = useState(null)
-  const [valorFaturaInput, setValorFaturaInput] = useState('')
+  const [lancamentoAberto, setLancamentoAberto] = useState(null) // { contaId, tipo }
+  const [editandoSaldoId, setEditandoSaldoId] = useState(null)
 
   const hoje = new Date()
   const chaveMesAtual = mesAtual()
@@ -1111,22 +1160,23 @@ function Contas({ contas, transacoes, onAdicionarConta, onEditarConta, onExcluir
     return Math.ceil((alvo - hoje) / (1000 * 60 * 60 * 24))
   }
 
-  function handleSalvarFatura(conta) {
-    const valor = Number(valorFaturaInput)
-    if (valorFaturaInput === '' || valor < 0) { alert('Digite um valor válido.'); return }
-    if (conta.tipo === 'credito') {
-      onEditarConta({ ...conta, faturas: { ...conta.faturas, [chaveMesAtual]: valor } })
-    } else {
-      // O usuário digita o saldo ATUAL que quer ver.
-      // Calculamos o saldoBase necessário para que: saldoBase + transações = valorDesejado
-      const efeitoTransacoes = transacoes
-        .filter((t) => t.contaId === conta.id)
-        .reduce((s, t) => s + (t.tipo === 'receita' ? t.valor : -t.valor), 0)
-      const novoSaldoBase = valor - efeitoTransacoes
-      onEditarConta({ ...conta, saldoBase: novoSaldoBase, saldo: valor })
-    }
-    setEditandoFatura(null)
-    setValorFaturaInput('')
+  function confirmarLancamento(conta, { descricao, valor, categoria, data }) {
+    const tipo = lancamentoAberto.tipo
+    // Atualiza saldo da conta diretamente
+    const novoSaldo = (conta.saldo || 0) + (tipo === 'receita' ? valor : -valor)
+    onEditarConta({ ...conta, saldo: novoSaldo })
+    // Salva transação no histórico
+    onAdicionarTransacao({
+      id: Date.now(),
+      tipo,
+      categoria,
+      descricao,
+      valor,
+      data,
+      fixa: false,
+      contaId: conta.id,
+    })
+    setLancamentoAberto(null)
   }
 
   return (
@@ -1152,135 +1202,110 @@ function Contas({ contas, transacoes, onAdicionarConta, onEditarConta, onExcluir
       {contas.map((conta) => {
         const info = infoTipoConta(conta.tipo)
         const ehCredito = conta.tipo === 'credito'
+        const saldo = conta.saldo || 0
         const faturaMes = ehCredito ? (conta.faturas?.[chaveMesAtual] ?? null) : null
-        const expandida = contaExpandida === conta.id
         const cores = corDoBanco(conta.banco || conta.nome)
         const diasFech = ehCredito ? diasAte(conta.diaFechamento) : null
         const diasVenc = ehCredito ? diasAte(conta.diaVencimento) : null
+        const lancAberto = lancamentoAberto?.contaId === conta.id
+        const editandoSaldo = editandoSaldoId === conta.id
 
         return (
           <div key={conta.id} style={{ marginBottom: 12 }}>
             <div style={{
-              background: ehCredito
-                ? `linear-gradient(135deg, ${cores[0]}, ${cores[1]})`
-                : '#1E293B',
-              borderRadius: 14,
-              padding: 14,
+              background: ehCredito ? `linear-gradient(135deg, ${cores[0]}, ${cores[1]})` : '#1E293B',
+              borderRadius: 14, padding: 14,
             }}>
-              <button
-                onClick={() => setContaExpandida(expandida ? null : conta.id)}
-                style={{ width: '100%', textAlign: 'left', background: 'transparent', border: 'none', padding: 0 }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <p style={{ color: '#fff', fontSize: 14, fontWeight: 700 }}>
-                    {info.icone} {conta.nome}
-                  </p>
-                  {ehCredito && conta.diaVencimento && (
-                    <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>Vence dia {conta.diaVencimento}</p>
-                  )}
+              {/* Cabeçalho do card */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <p style={{ color: '#fff', fontSize: 14, fontWeight: 700 }}>{info.icone} {conta.nome}</p>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button onClick={() => setModoForm(conta)} style={{ background: ehCredito ? 'rgba(255,255,255,0.15)' : '#0F172A', border: 'none', color: '#fff', borderRadius: 6, padding: '4px 8px', fontSize: 12 }}>✏️</button>
+                  <button onClick={() => { if (window.confirm(`Excluir "${conta.nome}"?`)) onExcluirConta(conta.id) }} style={{ background: ehCredito ? 'rgba(255,255,255,0.15)' : '#0F172A', border: 'none', color: '#fff', borderRadius: 6, padding: '4px 8px', fontSize: 12 }}>🗑️</button>
                 </div>
-                {ehCredito ? (
-                  <>
-                    <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>Fatura deste mês</p>
-                    <p style={{ color: '#fff', fontSize: 20, fontWeight: 700 }}>
-                      {faturaMes !== null ? formatarMoeda(faturaMes) : '—'}
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p style={{ color: '#94A3B8', fontSize: 11 }}>Saldo atual</p>
-                    <p style={{ color: calcularSaldoConta(conta, transacoes) >= 0 ? '#22C55E' : '#EF4444', fontSize: 20, fontWeight: 700 }}>
-                      {formatarMoeda(calcularSaldoConta(conta, transacoes))}
-                    </p>
-                    {(conta.saldoBase ?? conta.saldo ?? 0) !== 0 && (
-                      <p style={{ color: '#64748B', fontSize: 10 }}>base: {formatarMoeda(conta.saldoBase ?? conta.saldo ?? 0)}</p>
-                    )}
-                  </>
-                )}
-              </button>
-
-              <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-                <button
-                    onClick={() => {
-                      setEditandoFatura(conta.id)
-                      setValorFaturaInput(ehCredito ? (faturaMes !== null ? String(faturaMes) : '') : String(calcularSaldoConta(conta, transacoes)))
-                    }}
-                    style={{ flex: 1, padding: 8, borderRadius: 8, border: 'none', background: ehCredito ? 'rgba(255,255,255,0.2)' : '#0F172A', color: '#fff', fontWeight: 600, fontSize: 12 }}
-                  >
-                    {ehCredito ? '💳 Atualizar fatura' : '✏️ Atualizar saldo'}
-                  </button>
-                <button onClick={() => setModoForm(conta)} style={{ padding: 8, borderRadius: 8, border: 'none', background: ehCredito ? 'rgba(255,255,255,0.15)' : '#0F172A', color: '#fff', fontSize: 13 }}>✏️</button>
-                <button
-                  onClick={() => { if (window.confirm(`Excluir "${conta.nome}"?`)) onExcluirConta(conta.id) }}
-                  style={{ padding: 8, borderRadius: 8, border: 'none', background: ehCredito ? 'rgba(255,255,255,0.15)' : '#0F172A', color: '#fff', fontSize: 13 }}
-                >
-                  🗑️
-                </button>
               </div>
 
-              {editandoFatura === conta.id && (
-                <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
-                  <input
-                    autoFocus
-                    type="number"
-                    inputMode="decimal"
-                    placeholder="Valor total da fatura (R$)"
-                    value={valorFaturaInput}
-                    onChange={(e) => setValorFaturaInput(e.target.value)}
-                    style={{ flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.15)', color: '#fff', fontSize: 14 }}
-                  />
-                  <button onClick={() => handleSalvarFatura(conta)} style={{ background: '#fff', border: 'none', color: cores[0], borderRadius: 10, padding: '0 14px', fontWeight: 700 }}>OK</button>
-                  <button onClick={() => setEditandoFatura(null)} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: 10, padding: '0 10px' }}>✕</button>
+              {/* Saldo */}
+              {ehCredito ? (
+                <>
+                  <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>Fatura deste mês · vence dia {conta.diaVencimento}</p>
+                  <p style={{ color: '#fff', fontSize: 22, fontWeight: 700 }}>{faturaMes !== null ? formatarMoeda(faturaMes) : '—'}</p>
+                  {editandoSaldo && (
+                    <EditarSaldoInput
+                      saldoAtual={faturaMes || 0}
+                      onConfirmar={(v) => { onEditarConta({ ...conta, faturas: { ...conta.faturas, [chaveMesAtual]: Number(v) } }); setEditandoSaldoId(null) }}
+                      onCancelar={() => setEditandoSaldoId(null)}
+                    />
+                  )}
+                </>
+              ) : (
+                <>
+                  <p style={{ color: '#94A3B8', fontSize: 11 }}>Saldo atual</p>
+                  <p style={{ color: saldo >= 0 ? '#22C55E' : '#EF4444', fontSize: 22, fontWeight: 700 }}>{formatarMoeda(saldo)}</p>
+                  {editandoSaldo && (
+                    <EditarSaldoInput
+                      saldoAtual={saldo}
+                      onConfirmar={(v) => { onEditarConta({ ...conta, saldo: Number(v) }); setEditandoSaldoId(null) }}
+                      onCancelar={() => setEditandoSaldoId(null)}
+                    />
+                  )}
+                </>
+              )}
+
+              {/* Botões de ação */}
+              {!lancAberto && !editandoSaldo && (
+                <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
+                  {!ehCredito && (
+                    <>
+                      <button
+                        onClick={() => { setLancamentoAberto({ contaId: conta.id, tipo: 'receita' }); setEditandoSaldoId(null) }}
+                        style={{ flex: 1, padding: 9, borderRadius: 10, border: 'none', background: '#166534', color: '#86EFAC', fontWeight: 700, fontSize: 13 }}
+                      >
+                        + Receita
+                      </button>
+                      <button
+                        onClick={() => { setLancamentoAberto({ contaId: conta.id, tipo: 'despesa' }); setEditandoSaldoId(null) }}
+                        style={{ flex: 1, padding: 9, borderRadius: 10, border: 'none', background: '#7F1D1D', color: '#FCA5A5', fontWeight: 700, fontSize: 13 }}
+                      >
+                        − Despesa
+                      </button>
+                    </>
+                  )}
+                  <button
+                    onClick={() => { setEditandoSaldoId(conta.id); setLancamentoAberto(null) }}
+                    style={{ flex: ehCredito ? 1 : 0, padding: '9px 12px', borderRadius: 10, border: 'none', background: ehCredito ? 'rgba(255,255,255,0.2)' : '#0F172A', color: '#fff', fontSize: 13 }}
+                  >
+                    {ehCredito ? '💳 Atualizar fatura' : '⚙️'}
+                  </button>
+                </div>
+              )}
+
+              {/* Formulário de lançamento rápido */}
+              {lancAberto && (
+                <LancamentoRapido
+                  conta={conta}
+                  tipo={lancamentoAberto.tipo}
+                  onConfirmar={(dados) => confirmarLancamento(conta, dados)}
+                  onCancelar={() => setLancamentoAberto(null)}
+                />
+              )}
+
+              {/* Info crédito expandida */}
+              {ehCredito && (
+                <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+                  <div style={{ flex: 1, background: 'rgba(0,0,0,0.2)', borderRadius: 8, padding: 8 }}>
+                    <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 10 }}>Fechamento</p>
+                    <p style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>Dia {conta.diaFechamento}</p>
+                    <p style={{ color: diasFech <= 3 ? '#FCA5A5' : 'rgba(255,255,255,0.4)', fontSize: 10 }}>em {diasFech} dias</p>
+                  </div>
+                  <div style={{ flex: 1, background: 'rgba(0,0,0,0.2)', borderRadius: 8, padding: 8 }}>
+                    <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 10 }}>Vencimento</p>
+                    <p style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>Dia {conta.diaVencimento}</p>
+                    <p style={{ color: diasVenc <= 5 ? '#FDE68A' : 'rgba(255,255,255,0.4)', fontSize: 10 }}>em {diasVenc} dias</p>
+                  </div>
                 </div>
               )}
             </div>
-
-            {expandida && ehCredito && (
-              <div style={{ background: '#1E293B', borderRadius: 12, padding: 14, marginTop: 6 }}>
-                <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-                  <div style={{ flex: 1, background: '#0F172A', borderRadius: 10, padding: 10 }}>
-                    <p style={{ color: '#94A3B8', fontSize: 10 }}>Fechamento</p>
-                    <p style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>Dia {conta.diaFechamento}</p>
-                    <p style={{ color: diasFech <= 3 ? '#EF4444' : '#64748B', fontSize: 11 }}>em {diasFech} {diasFech === 1 ? 'dia' : 'dias'}</p>
-                  </div>
-                  <div style={{ flex: 1, background: '#0F172A', borderRadius: 10, padding: 10 }}>
-                    <p style={{ color: '#94A3B8', fontSize: 10 }}>Vencimento</p>
-                    <p style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>Dia {conta.diaVencimento}</p>
-                    <p style={{ color: diasVenc <= 5 ? '#F59E0B' : '#64748B', fontSize: 11 }}>em {diasVenc} {diasVenc === 1 ? 'dia' : 'dias'}</p>
-                  </div>
-                </div>
-                <p style={{ color: '#94A3B8', fontSize: 12, marginBottom: 8 }}>Histórico</p>
-                {Object.entries(conta.faturas || {}).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 6).map(([chave, valor]) => {
-                  const [ano, mes] = chave.split('-')
-                  return (
-                    <div key={chave} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #334155' }}>
-                      <p style={{ color: '#94A3B8', fontSize: 12 }}>{NOMES_MESES[Number(mes) - 1]} {ano}{chave === chaveMesAtual ? ' • atual' : ''}</p>
-                      <p style={{ color: '#fff', fontSize: 12, fontWeight: 600 }}>{formatarMoeda(valor)}</p>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-
-            {expandida && !ehCredito && (
-              <div style={{ background: '#1E293B', borderRadius: 12, padding: 14, marginTop: 6 }}>
-                <p style={{ color: '#94A3B8', fontSize: 12, marginBottom: 8 }}>Últimas movimentações</p>
-                {transacoes.filter((t) => t.contaId === conta.id).length === 0 && (
-                  <p style={{ color: '#64748B', fontSize: 12 }}>Nenhuma transação vinculada ainda.</p>
-                )}
-                {[...transacoes.filter((t) => t.contaId === conta.id)]
-                  .sort((a, b) => new Date(b.data) - new Date(a.data))
-                  .slice(0, 8)
-                  .map((t) => (
-                    <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #334155' }}>
-                      <p style={{ color: '#fff', fontSize: 12 }}>{t.descricao}</p>
-                      <p style={{ color: t.tipo === 'receita' ? '#22C55E' : '#EF4444', fontSize: 12, fontWeight: 600 }}>
-                        {t.tipo === 'receita' ? '+' : '-'}{formatarMoeda(t.valor)}
-                      </p>
-                    </div>
-                  ))}
-              </div>
-            )}
           </div>
         )
       })}
@@ -2891,10 +2916,10 @@ export default function App() {
       {abaAtiva === 'cartoes' && (
         <Contas
           contas={contas}
-          transacoes={transacoes}
           onAdicionarConta={handleAdicionarConta}
           onEditarConta={handleEditarConta}
           onExcluirConta={handleExcluirConta}
+          onAdicionarTransacao={handleAdicionar}
           filhos={filhos}
         />
       )}
